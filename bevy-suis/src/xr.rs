@@ -150,56 +150,6 @@ pub enum InputDataType {
     Pointer(Ray3d), // needs datamap tho
 }
 
-#[derive(Component, Debug)]
-pub enum Field {
-    Sphere(f32),
-}
-impl Field {
-    pub fn closest_point(
-        &self,
-        this_transform: &Transform,
-        reference_space: &Transform,
-        point: Vec3,
-    ) -> Vec3 {
-        let reference_to_this_transform =
-            reference_space.compute_matrix().inverse() * this_transform.compute_matrix();
-        let local_point = reference_to_this_transform.transform_point3(point);
-
-        let local_closest_point = match self {
-            Field::Sphere(r) => local_point.normalize() * (local_point.length().min(*r)),
-        };
-
-        reference_to_this_transform
-            .inverse()
-            .transform_point3(local_closest_point)
-    }
-    pub fn closest_point2(&self, field_transform: &GlobalTransform, point: Vec3) -> Vec3 {
-        let world_to_local_matrix = field_transform.compute_matrix().inverse();
-        let local_point = world_to_local_matrix.transform_point3(point);
-
-        let local_closest_point = match self {
-            Field::Sphere(r) => local_point.normalize() * (local_point.length().min(*r)),
-        };
-
-        world_to_local_matrix
-            .inverse()
-            .transform_point3(local_closest_point)
-    }
-    pub fn distance2(&self, field_transform: &GlobalTransform, point: Vec3) -> f32 {
-        let closest_point = self.closest_point2(field_transform, point);
-        point.distance(closest_point)
-    }
-
-    pub fn distance(
-        &self,
-        this_transform: &Transform,
-        reference_space: &Transform,
-        point: Vec3,
-    ) -> f32 {
-        let closest_point = self.closest_point(this_transform, reference_space, point);
-        point.distance(closest_point)
-    }
-}
 
 // fn clear_handler_old_input<(mut handlers: Query<&mut InputHandler<T>>) {
 //     for mut handler in handlers.iter_mut() {
