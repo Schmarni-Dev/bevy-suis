@@ -1,14 +1,206 @@
 use bevy::prelude::*;
-use bevy_mod_openxr::features::handtracking::OxrHandTracker;
-use bevy_mod_xr::hands::{HandBone, HandBoneRadius, XrHandBoneEntities, HAND_JOINT_COUNT};
+use bevy_mod_openxr::{
+    features::handtracking::{spawn_hand_bones, OxrHandTracker},
+    session::OxrSession,
+};
+use bevy_mod_xr::{
+    hands::{HandBone, HandBoneRadius, LeftHand, RightHand, XrHandBoneEntities, HAND_JOINT_COUNT},
+    session::{XrPreDestroySession, XrSessionCreated, XrTrackingRoot},
+};
 
-pub struct SUISXRPlugin;
-impl Plugin for SUISXRPlugin {
+use crate::InputMethod;
+
+pub struct SuisXrPlugin;
+impl Plugin for SuisXrPlugin {
     fn build(&self, app: &mut App) {
-        // app.add_systems(Update, ());
+        app.add_systems(XrSessionCreated, spawn_input_hands);
+        app.add_systems(XrPreDestroySession, despawn_input_hands);
+        app.add_systems(PreUpdate, update_hand_input_methods);
     }
 }
 
+#[derive(Component, Clone, Copy)]
+pub struct HandInputMethodData(Hand);
+impl HandInputMethodData {
+    pub const fn new() -> HandInputMethodData {
+        HandInputMethodData(Hand::empty())
+    }
+
+    pub fn set_in_global_space(&mut self, hand: Hand) {
+        self.0 = hand;
+    }
+
+    pub fn get_in_relative_space(&self, relative_to: &GlobalTransform) -> Hand {
+        let mat = &relative_to.compute_matrix().inverse();
+        Hand {
+            thumb: Thumb {
+                tip: mul_joint(mat, self.0.thumb.tip),
+                distal: mul_joint(mat, self.0.thumb.distal),
+                proximal: mul_joint(mat, self.0.thumb.proximal),
+                metacarpal: mul_joint(mat, self.0.thumb.metacarpal),
+            },
+            index: Finger {
+                tip: mul_joint(mat, self.0.index.tip),
+                distal: mul_joint(mat, self.0.index.distal),
+                proximal: mul_joint(mat, self.0.index.proximal),
+                intermediate: mul_joint(mat, self.0.index.intermediate),
+                metacarpal: mul_joint(mat, self.0.index.metacarpal),
+            },
+            middle: Finger {
+                tip: mul_joint(mat, self.0.middle.tip),
+                distal: mul_joint(mat, self.0.middle.distal),
+                proximal: mul_joint(mat, self.0.middle.proximal),
+                intermediate: mul_joint(mat, self.0.middle.intermediate),
+                metacarpal: mul_joint(mat, self.0.middle.metacarpal),
+            },
+            ring: Finger {
+                tip: mul_joint(mat, self.0.ring.tip),
+                distal: mul_joint(mat, self.0.ring.distal),
+                proximal: mul_joint(mat, self.0.ring.proximal),
+                intermediate: mul_joint(mat, self.0.ring.intermediate),
+                metacarpal: mul_joint(mat, self.0.ring.metacarpal),
+            },
+            little: Finger {
+                tip: mul_joint(mat, self.0.little.tip),
+                distal: mul_joint(mat, self.0.little.distal),
+                proximal: mul_joint(mat, self.0.little.proximal),
+                intermediate: mul_joint(mat, self.0.little.intermediate),
+                metacarpal: mul_joint(mat, self.0.little.metacarpal),
+            },
+        }
+    }
+}
+
+fn mul_joint(mat: &Mat4, joint: Joint) -> Joint {
+    Joint {
+        pos: mat.transform_point(joint.pos),
+        ori: mat.to_scale_rotation_translation().1 * joint.ori,
+        radius: joint.radius,
+    }
+}
+
+impl Default for HandInputMethodData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn update_hand_input_methods(
+    mut hand_method_query: Query<
+        (&mut HandInputMethodData, &mut Transform, &SuisXrHandTracker),
+        With<InputMethod>,
+    >,
+    xr_hand_tracker_query: Query<&XrHandBoneEntities>,
+    xr_hand_joint_query: Query<(&GlobalTransform, &HandBoneRadius)>,
+) {
+    for (mut hand_data, mut method_transform, tracker) in &mut hand_method_query {
+        let Ok(joint_entities) = xr_hand_tracker_query.get(tracker.0) else {
+            warn!("unable to get hand tracker entity");
+            continue;
+        };
+        let Ok(joints) = xr_hand_joint_query.get_many(joint_entities.0) else {
+            warn!("unable to get hand joints");
+            continue;
+        };
+        let hand = Hand::from_data(&joints);
+        *method_transform = joints[HandBone::IndexTip as usize].0.compute_transform();
+        hand_data.set_in_global_space(hand);
+    }
+}
+
+#[derive(Clone, Copy, Component, Debug)]
+pub struct SuisXrHandTracker(pub Entity);
+
+#[derive(Clone, Copy, Component, Debug)]
+pub enum HandSide {
+    Left,
+    Right,
+}
+#[derive(Clone, Copy, Component, Debug)]
+pub struct SuisInputXrHand;
+
+#[allow(clippy::type_complexity)]
+fn despawn_input_hands(
+    mut cmds: Commands,
+    query: Query<Entity, Or<(With<SuisInputXrHand>, With<HandInputMethodData>)>>,
+) {
+    for e in &query {
+        cmds.entity(e).despawn();
+    }
+}
+
+fn spawn_input_hands(
+    mut cmds: Commands,
+    session: Res<OxrSession>,
+    root: Query<Entity, With<XrTrackingRoot>>,
+) {
+    let Ok(root) = root.get_single() else {
+        error!("unable to get tracking root, skipping hand creation");
+        return;
+    };
+    let tracker_left = match session.create_hand_tracker(openxr::HandEXT::LEFT) {
+        Ok(t) => t,
+        Err(openxr::sys::Result::ERROR_EXTENSION_NOT_PRESENT) => {
+            warn!("Handtracking Extension not loaded, Unable to create Handtracker!");
+            return;
+        }
+        Err(err) => {
+            warn!("Error while creating Handtracker: {}", err.to_string());
+            return;
+        }
+    };
+    let tracker_right = match session.create_hand_tracker(openxr::HandEXT::RIGHT) {
+        Ok(t) => t,
+        Err(openxr::sys::Result::ERROR_EXTENSION_NOT_PRESENT) => {
+            warn!("Handtracking Extension not loaded, Unable to create Handtracker!");
+            return;
+        }
+        Err(err) => {
+            warn!("Error while creating Handtracker: {}", err.to_string());
+            return;
+        }
+    };
+    let left_bones = spawn_hand_bones(&mut cmds, (SuisInputXrHand, LeftHand, HandSide::Left));
+    let right_bones = spawn_hand_bones(&mut cmds, (SuisInputXrHand, RightHand, HandSide::Right));
+    cmds.entity(root).push_children(&left_bones);
+    cmds.entity(root).push_children(&right_bones);
+    let left_tracker_entity = cmds
+        .spawn((
+            SuisInputXrHand,
+            OxrHandTracker(tracker_left),
+            XrHandBoneEntities(left_bones),
+            LeftHand,
+            HandSide::Left,
+        ))
+        .id();
+    let right_tracker_entity = cmds
+        .spawn((
+            SuisInputXrHand,
+            OxrHandTracker(tracker_right),
+            XrHandBoneEntities(right_bones),
+            RightHand,
+            HandSide::Right,
+        ))
+        .id();
+    cmds.spawn((
+        SpatialBundle::default(),
+        InputMethod::new(),
+        HandInputMethodData(Hand::empty()),
+        SuisXrHandTracker(left_tracker_entity),
+        LeftHand,
+        HandSide::Left,
+    ));
+    cmds.spawn((
+        SpatialBundle::default(),
+        InputMethod::new(),
+        HandInputMethodData(Hand::empty()),
+        SuisXrHandTracker(right_tracker_entity),
+        RightHand,
+        HandSide::Right,
+    ));
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Joint {
     pos: Vec3,
     ori: Quat,
@@ -31,12 +223,13 @@ impl Joint {
         }
     }
 }
+#[derive(Clone, Copy, Debug)]
 pub struct Finger {
-    tip: Joint,
-    distal: Joint,
-    proximal: Joint,
-    intermediate: Joint,
-    metacarpal: Joint,
+    pub tip: Joint,
+    pub distal: Joint,
+    pub proximal: Joint,
+    pub intermediate: Joint,
+    pub metacarpal: Joint,
 }
 impl Finger {
     const fn empty() -> Self {
@@ -49,22 +242,12 @@ impl Finger {
         }
     }
 }
+#[derive(Clone, Copy, Debug)]
 pub struct Thumb {
-    tip: Joint,
-    distal: Joint,
-    proximal: Joint,
-    metacarpal: Joint,
-}
-impl Thumb {
-    fn set_joint(&mut self, bone: &HandBone, joint: Joint) {
-        match bone {
-            HandBone::ThumbMetacarpal => self.metacarpal = joint,
-            HandBone::ThumbProximal => self.proximal = joint,
-            HandBone::ThumbDistal => self.distal = joint,
-            HandBone::ThumbTip => self.tip = joint,
-            _ => (),
-        }
-    }
+    pub tip: Joint,
+    pub distal: Joint,
+    pub proximal: Joint,
+    pub metacarpal: Joint,
 }
 impl Thumb {
     const fn empty() -> Self {
@@ -76,12 +259,13 @@ impl Thumb {
         }
     }
 }
+#[derive(Clone, Copy, Debug)]
 pub struct Hand {
-    thumb: Thumb,
-    index: Finger,
-    middle: Finger,
-    ring: Finger,
-    little: Finger,
+    pub thumb: Thumb,
+    pub index: Finger,
+    pub middle: Finger,
+    pub ring: Finger,
+    pub little: Finger,
 }
 impl Hand {
     pub fn from_data(data: &[(&GlobalTransform, &HandBoneRadius); HAND_JOINT_COUNT]) -> Hand {
@@ -122,7 +306,7 @@ impl Hand {
             },
         }
     }
-    const fn empty() -> Hand {
+    pub const fn empty() -> Hand {
         Hand {
             thumb: Thumb::empty(),
             index: Finger::empty(),
@@ -132,27 +316,3 @@ impl Hand {
         }
     }
 }
-
-fn get_hands(
-    joint_query: Query<(&GlobalTransform, &HandBoneRadius)>,
-    hand_query: Query<&XrHandBoneEntities>,
-) {
-    let hands = hand_query
-        .iter()
-        .filter_map(|v| joint_query.get_many(v.0).ok())
-        .map(|v| Hand::from_data(&v))
-        .collect::<Vec<_>>();
-}
-
-pub enum InputDataType {
-    Hand(Hand),
-    // Controller() // lol gotta do this one using the openxr action system :/
-    Pointer(Ray3d), // needs datamap tho
-}
-
-
-// fn clear_handler_old_input<(mut handlers: Query<&mut InputHandler<T>>) {
-//     for mut handler in handlers.iter_mut() {
-//         handler.previous_frame_data = std::mem::take(&mut handler.current_data);
-//     }
-// }

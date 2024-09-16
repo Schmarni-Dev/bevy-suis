@@ -5,12 +5,11 @@ use bevy_mod_openxr::{
     action_binding::{OxrSendActionBindings, OxrSuggestActionBinding},
     action_set_attaching::OxrAttachActionSet,
     action_set_syncing::{OxrActionSetSyncSet, OxrSyncActionSet},
-    init::create_xr_session,
     resources::OxrInstance,
     session::OxrSession,
 };
 use bevy_mod_xr::{
-    session::{session_available, XrCreateSession, XrDestroySession},
+    session::{session_available, XrPreDestroySession, XrSessionCreated},
     spaces::XrSpace,
     types::XrPose,
 };
@@ -32,9 +31,9 @@ impl Plugin for SuisOxrActionPlugin {
         );
         app.add_systems(PostStartup, create_actions.run_if(session_available));
         // The .after should ideally not be needed, but it is for bevy_mod_openxr 0.1.0-rc1
-        app.add_systems(XrCreateSession, attach_actions.after(create_xr_session));
+        app.add_systems(XrSessionCreated, attach_actions);
         // There might be a ordering issue here too
-        app.add_systems(XrDestroySession, destroy_action_spaces);
+        app.add_systems(XrPreDestroySession, destroy_action_spaces);
         app.add_systems(OxrSendActionBindings, suggest_bindings);
     }
 }

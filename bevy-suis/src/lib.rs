@@ -7,11 +7,12 @@ use bevy::{
         world::World,
     },
     log::error,
-    math::Vec3,
+    math::{Ray3d, Vec3},
     prelude::{App, Entity, IntoSystemConfigs},
     transform::components::{GlobalTransform, Transform},
 };
 use std::{cmp::Ordering, hash::Hash};
+pub mod debug;
 pub mod openxr_low_level_actions;
 pub mod xr;
 
@@ -28,6 +29,9 @@ impl Plugin for SuisCorePlugin {
         );
     }
 }
+
+#[derive(Component, Clone, Copy, Debug)]
+pub struct PointerInputMethod(pub Ray3d);
 
 fn clear_captures(mut query: Query<&mut InputMethod>) {
     for mut method in &mut query {
@@ -72,7 +76,15 @@ fn run_capture_conditions(world: &mut World) {
             iter.fetch_next()
         {
             // send a precomputed distance?
-            let closest_point = handler_field.closest_point2(handler_transform, method_position);
+            let closest_point = handler_transform
+                .compute_matrix()
+                .inverse()
+                .transform_point3(handler_field.closest_point2(handler_transform, method_position));
+            // SAFETY:
+            // idk might be fine, might not be fine
+            handler
+                .capture_condition
+                .initialize(unsafe { w.world_mut() });
             let wants_to_capture = handler.capture_condition.run(
                 CaptureContext {
                     this_handler: handler_entity,
@@ -99,9 +111,15 @@ fn run_capture_conditions(world: &mut World) {
     world.insert_resource(state);
 }
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Default)]
 pub struct InputMethod {
     pub captured_by: Option<Entity>,
+}
+
+impl InputMethod {
+    pub const fn new() -> InputMethod {
+        InputMethod { captured_by: None }
+    }
 }
 
 #[derive(Component, Debug)]

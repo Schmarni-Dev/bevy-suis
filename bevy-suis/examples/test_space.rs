@@ -17,7 +17,7 @@ fn setup(mut cmds: Commands) {
         .insert(SpatialBundle::default())
         .insert(Transform::from_xyz(0.0, -1.0, 0.0));
     cmds.spawn(Camera3dBundle::default())
-        .insert(Transform::from_xyz(0.0, 2.0, 5.0).looking_at(Vec3::ZERO, Dir3::Y));
+        .insert(Transform::from_xyz(0.5, 1.5, 3.0).looking_at(Vec3::ZERO, Dir3::Y));
 }
 
 fn move_pointer(

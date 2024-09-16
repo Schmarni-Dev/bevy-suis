@@ -6,5 +6,5 @@ edition = "2021"
 [dependencies]
 bevy = "0.14"
 openxr = { version = "0.18.0", default-features = false }
-bevy_mod_xr = "0.1.0-rc1"
-bevy_mod_openxr = "0.1.0-rc1"
+bevy_mod_xr = { git = "https://github.com/awtterpip/bevy_oxr" }
+bevy_mod_openxr = { git = "https://github.com/awtterpip/bevy_oxr" }
