@@ -202,9 +202,9 @@ fn spawn_input_hands(
 
 #[derive(Clone, Copy, Debug)]
 pub struct Joint {
-    pos: Vec3,
-    ori: Quat,
-    radius: f32,
+    pub pos: Vec3,
+    pub ori: Quat,
+    pub radius: f32,
 }
 impl Joint {
     const fn empty() -> Self {

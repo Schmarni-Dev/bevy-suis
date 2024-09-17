@@ -15,6 +15,7 @@ use std::{cmp::Ordering, hash::Hash};
 pub mod debug;
 pub mod openxr_low_level_actions;
 pub mod xr;
+pub mod xr_controllers;
 
 pub struct SuisCorePlugin;
 impl Plugin for SuisCorePlugin {
@@ -33,9 +34,12 @@ impl Plugin for SuisCorePlugin {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct PointerInputMethod(pub Ray3d);
 
-fn clear_captures(mut query: Query<&mut InputMethod>) {
+fn clear_captures(mut query: Query<&mut InputMethod>, mut handler_query: Query<&mut InputHandler>) {
     for mut method in &mut query {
         method.captured_by = None;
+    }
+    for mut handler in &mut handler_query {
+        handler.captured_methods.clear();
     }
 }
 
@@ -87,7 +91,8 @@ fn run_capture_conditions(world: &mut World) {
                 .initialize(unsafe { w.world_mut() });
             let wants_to_capture = handler.capture_condition.run(
                 CaptureContext {
-                    this_handler: handler_entity,
+                    handler: handler_entity,
+                    handler_location: *handler_transform,
                     input_method: method_entity,
                     input_method_location: Transform::from_matrix(
                         handler_transform
@@ -103,6 +108,7 @@ fn run_capture_conditions(world: &mut World) {
             );
             if wants_to_capture {
                 method.captured_by = Some(handler_entity);
+                handler.captured_methods.push(method_entity);
                 break;
             }
         }
@@ -125,18 +131,21 @@ impl InputMethod {
 #[derive(Component, Debug)]
 pub struct InputHandler {
     pub capture_condition: Box<dyn System<In = CaptureContext, Out = bool>>,
+    pub captured_methods: Vec<Entity>,
 }
 
 impl InputHandler {
     pub fn new<T>(system: impl IntoSystem<CaptureContext, bool, T>) -> InputHandler {
         InputHandler {
             capture_condition: Box::new(IntoSystem::into_system(system)),
+            captured_methods: Vec::new(),
         }
     }
 }
 
 pub struct CaptureContext {
-    pub this_handler: Entity,
+    pub handler: Entity,
+    pub handler_location: GlobalTransform,
     pub input_method: Entity,
     /// Location in handlers local space
     pub input_method_location: Transform,

@@ -2,15 +2,20 @@ use bevy::{color::palettes::css, prelude::*};
 use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
 use bevy_mod_xr::{session::XrSessionCreated, types::XrPose};
 use bevy_suis::{
-    debug::SuisDebugGizmosPlugin, xr::SuisXrPlugin, CaptureContext, Field, InputHandler,
-    SuisCorePlugin,
+    debug::SuisDebugGizmosPlugin, xr::SuisXrPlugin, xr_controllers::SuisXrControllerPlugin,
+    CaptureContext, Field, InputHandler, SuisCorePlugin,
 };
 use openxr::ReferenceSpaceType;
 
 fn main() -> AppExit {
     App::new()
         .add_plugins(add_xr_plugins(DefaultPlugins))
-        .add_plugins((SuisCorePlugin, SuisXrPlugin, SuisDebugGizmosPlugin))
+        .add_plugins((
+            SuisCorePlugin,
+            SuisXrPlugin,
+            SuisDebugGizmosPlugin,
+            SuisXrControllerPlugin,
+        ))
         .add_systems(Startup, setup)
         .add_systems(XrSessionCreated, make_spectator_cam_follow)
         .run()
@@ -40,7 +45,7 @@ fn setup(mut cmds: Commands) {
 }
 
 fn capture_condition(ctx: In<CaptureContext>, query: Query<&Field>) -> bool {
-    let Ok(field) = query.get(ctx.this_handler) else {
+    let Ok(field) = query.get(ctx.handler) else {
         warn!("Handler Somehow doesn't have a field?!");
         return false;
     };
