@@ -16,6 +16,7 @@ pub mod debug;
 pub mod openxr_low_level_actions;
 pub mod xr;
 pub mod xr_controllers;
+pub mod window_pointers;
 
 pub struct SuisCorePlugin;
 impl Plugin for SuisCorePlugin {

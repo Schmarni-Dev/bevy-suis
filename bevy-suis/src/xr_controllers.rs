@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_mod_xr::{
     hands::{LeftHand, RightHand},
-    session::{XrPreDestroySession, XrSessionCreated, XrTrackingRoot},
+    session::{XrPreDestroySession, XrSessionCreated, XrState, XrTrackingRoot},
 };
 use schminput::{
     openxr::{AttachSpaceToEntity, OxrInputPlugin},
@@ -15,6 +15,9 @@ pub struct SuisXrControllerPlugin;
 
 impl Plugin for SuisXrControllerPlugin {
     fn build(&self, app: &mut App) {
+        if *app.world().resource::<XrState>() == XrState::Unavailable {
+            return;
+        }
         if !app.is_plugin_added::<SchminputPlugin>() {
             // assuming that all plugins are missing, adding minimal plugins
             app.add_plugins(SchminputPlugin);

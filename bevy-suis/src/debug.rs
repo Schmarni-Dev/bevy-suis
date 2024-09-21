@@ -1,6 +1,6 @@
 use bevy::{color::palettes::css, prelude::*};
 
-use crate::{Field, InputMethod};
+use crate::{Field, InputMethod, PointerInputMethod};
 pub struct SuisDebugGizmosPlugin;
 
 impl Plugin for SuisDebugGizmosPlugin {
@@ -10,16 +10,23 @@ impl Plugin for SuisDebugGizmosPlugin {
     }
 }
 
-fn draw_method_gizmos(method_query: Query<(&GlobalTransform, &InputMethod)>, mut gizmos: Gizmos) {
-    for (transform, method) in &method_query {
+fn draw_method_gizmos(
+    method_query: Query<(&GlobalTransform, &InputMethod, Option<&PointerInputMethod>)>,
+    mut gizmos: Gizmos,
+) {
+    for (transform, method, pointer) in &method_query {
         let color = match method.captured_by.is_some() {
             true => css::LIME,
             false => css::BLUE,
         };
-        gizmos.cuboid(
-            transform.compute_transform().with_scale(Vec3::splat(0.05)),
-            color,
-        );
+        if let Some(ray) = pointer {
+            gizmos.line(ray.0.origin, ray.0.origin + (*ray.0.direction * 0.2), color);
+        } else {
+            gizmos.cuboid(
+                transform.compute_transform().with_scale(Vec3::splat(0.05)),
+                color,
+            );
+        }
     }
 }
 

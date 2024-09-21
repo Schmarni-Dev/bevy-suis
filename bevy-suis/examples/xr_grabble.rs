@@ -1,8 +1,13 @@
 use bevy::{color::palettes::css, prelude::*};
 use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
-use bevy_mod_xr::{session::XrSessionCreated, types::XrPose};
+use bevy_mod_xr::{
+    camera::XrCamera,
+    session::{session_running, XrSessionCreated},
+    types::XrPose,
+};
 use bevy_suis::{
     debug::SuisDebugGizmosPlugin,
+    window_pointers::SuisWindowPointerPlugin,
     xr::{Hand, HandInputMethodData, SuisXrPlugin},
     xr_controllers::{SuisXrControllerPlugin, XrControllerInputMethodData},
     CaptureContext, Field, InputHandler, SuisCorePlugin,
@@ -17,11 +22,19 @@ fn main() -> AppExit {
             SuisXrPlugin,
             SuisDebugGizmosPlugin,
             SuisXrControllerPlugin,
+            SuisWindowPointerPlugin,
         ))
         .add_systems(Startup, setup)
         .add_systems(XrSessionCreated, make_spectator_cam_follow)
         .add_systems(Update, move_grabble)
+        .add_systems(Update, update_camera.run_if(not(session_running)))
         .run()
+}
+
+fn update_camera(mut cams: Query<&mut Transform, (With<Camera>, Without<XrCamera>)>) {
+    for mut transform in cams.iter_mut() {
+        *transform = Transform::from_xyz(0.5, 2.0, 3.6).looking_at(Vec3::Y, Dir3::Y);
+    }
 }
 
 #[derive(Clone, Copy, Component)]
