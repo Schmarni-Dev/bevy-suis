@@ -25,7 +25,7 @@ impl Default for RaymarchDefaultStepSize {
 pub struct RaymarchHitDistance(pub f32);
 impl Default for RaymarchHitDistance {
     fn default() -> Self {
-        Self(f32::EPSILON*4.0)
+        Self(f32::EPSILON * 4.0)
     }
 }
 
