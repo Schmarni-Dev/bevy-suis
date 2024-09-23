@@ -31,7 +31,7 @@ impl Plugin for SuisXrControllerPlugin {
             update_method_data
                 .after(SchminputSet::SyncInputActions)
                 // probably not needed
-                .before(crate::InputMethodCapturingSet),
+                .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
         );
     }
 }

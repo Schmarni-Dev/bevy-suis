@@ -8,14 +8,17 @@ use bevy_mod_xr::{
     session::{XrPreDestroySession, XrSessionCreated, XrTrackingRoot},
 };
 
-use crate::InputMethod;
+use crate::{InputMethod, SuisPreUpdateSets};
 
 pub struct SuisXrPlugin;
 impl Plugin for SuisXrPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(XrSessionCreated, spawn_input_hands);
         app.add_systems(XrPreDestroySession, despawn_input_hands);
-        app.add_systems(PreUpdate, update_hand_input_methods);
+        app.add_systems(
+            PreUpdate,
+            update_hand_input_methods.in_set(SuisPreUpdateSets::UpdateInputMethods),
+        );
     }
 }
 

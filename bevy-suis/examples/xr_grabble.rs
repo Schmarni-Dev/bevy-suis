@@ -1,19 +1,19 @@
-use bevy::{color::palettes::css, prelude::*};
+use bevy::prelude::*;
 use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
 use bevy_mod_xr::{
     camera::XrCamera,
     session::{session_running, XrSessionCreated},
-    types::XrPose,
 };
 use bevy_suis::{
     debug::SuisDebugGizmosPlugin,
-    window_pointers::SuisWindowPointerPlugin,
+    window_pointers::{MouseInputMethodData, SuisWindowPointerPlugin},
     xr::{Hand, HandInputMethodData, SuisXrPlugin},
     xr_controllers::{SuisXrControllerPlugin, XrControllerInputMethodData},
-    CaptureContext, Field, InputHandler, SuisCorePlugin,
+    CaptureContext, Field, InputHandler, PointerInputMethod, SuisCorePlugin,
 };
 use openxr::ReferenceSpaceType;
 
+// TODO: improve capturing mechanism
 fn main() -> AppExit {
     App::new()
         .add_plugins(add_xr_plugins(DefaultPlugins))
@@ -59,6 +59,7 @@ fn move_grabble(
         &GlobalTransform,
         Option<&HandInputMethodData>,
         Option<&XrControllerInputMethodData>,
+        Option<&MouseInputMethodData>,
     )>,
     parent_query: Query<&GlobalTransform>,
     mut cmds: Commands,
@@ -66,7 +67,7 @@ fn move_grabble(
     for (handler_entity, handler, handler_gt, mut handler_transform, grabbed, parent) in
         &mut grabbles
     {
-        let Some((method_transform, hand_data, controller_data)) = handler
+        let Some((method_transform, hand_data, controller_data, mouse_data)) = handler
             .captured_methods
             .first()
             .copied()
@@ -82,6 +83,9 @@ fn move_grabble(
         }
         if let Some(controller) = controller_data {
             grabbing |= controller.squeezed;
+        }
+        if let Some(mouse) = mouse_data {
+            grabbing |= mouse.left_button.pressed;
         }
         match (grabbed, grabbing) {
             (None, true) => {
@@ -136,7 +140,11 @@ fn setup(mut cmds: Commands) {
 
 fn capture_condition(
     ctx: In<CaptureContext>,
-    query: Query<Option<&HandInputMethodData>>,
+    query: Query<(
+        Option<&HandInputMethodData>,
+        Has<PointerInputMethod>,
+        Option<&MouseInputMethodData>,
+    )>,
     handler_query: Query<&InputHandler>,
 ) -> bool {
     // Only Capture one method
@@ -151,13 +159,21 @@ fn capture_condition(
         .distance(ctx.input_method_location.translation);
 
     // threshold needed to be this high else controllers wouldn't rellieably capture, idk why
-    let mut capture = method_distance <= 0.0001;
-    let Ok(Some(hand_data)) = query.get(ctx.input_method) else {
+    let mut capture = method_distance <= f32::EPSILON;
+    let Ok((hand_data, is_pointer, mouse_data)) = query.get(ctx.input_method) else {
         return capture;
     };
-    let hand = hand_data.get_in_relative_space(&ctx.handler_location);
-    if method_distance < 0.1 {
-        capture |= finger_separation(&hand, GRAB_SEPARATION * 1.5);
+    if let Some(hand_data) = hand_data {
+        let hand = hand_data.get_in_relative_space(&ctx.handler_location);
+        if method_distance < 0.1 {
+            capture |= finger_separation(&hand, GRAB_SEPARATION * 1.5);
+        }
+    }
+    if is_pointer {
+        if let Some(mouse) = mouse_data {
+            return mouse.left_button.pressed;
+        }
+        return true;
     }
     capture
 }

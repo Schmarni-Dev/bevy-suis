@@ -11,23 +11,32 @@ use bevy::{
     prelude::{App, Entity, IntoSystemConfigs},
     transform::components::{GlobalTransform, Transform},
 };
+use raymarching::{
+    raymarch_fields, RaymarchDefaultStepSize, RaymarchHitDistance, RaymarchMaxIterations,
+};
 use std::{cmp::Ordering, hash::Hash};
 pub mod debug;
 pub mod openxr_low_level_actions;
+pub mod raymarching;
+pub mod window_pointers;
 pub mod xr;
 pub mod xr_controllers;
-pub mod window_pointers;
 
 pub struct SuisCorePlugin;
 impl Plugin for SuisCorePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.configure_sets(
             PreUpdate,
             (
-                clear_captures,
-                run_capture_conditions.in_set(InputMethodCapturingSet),
-            )
-                .chain(),
+                SuisPreUpdateSets::UpdateInputMethods,
+                SuisPreUpdateSets::InputMethodCapturing,
+            ),
+        );
+        app.add_systems(
+            PreUpdate,
+            (clear_captures, run_capture_conditions)
+                .chain()
+                .in_set(SuisPreUpdateSets::InputMethodCapturing),
         );
     }
 }
@@ -45,7 +54,10 @@ fn clear_captures(mut query: Query<&mut InputMethod>, mut handler_query: Query<&
 }
 
 #[derive(SystemSet, Clone, Copy, Hash, PartialEq, Eq, Debug)]
-pub struct InputMethodCapturingSet;
+pub enum SuisPreUpdateSets {
+    UpdateInputMethods,
+    InputMethodCapturing,
+}
 
 fn run_capture_conditions(world: &mut World) {
     let mut state = world
@@ -55,28 +67,41 @@ fn run_capture_conditions(world: &mut World) {
     // SAFETY:
     // idk might be fine, might not be fine
     let (mut method_query, mut handler_query) = unsafe { state.0.get_mut(w.world_mut()) };
-    for (method_entity, mut method, method_location) in method_query.iter_mut() {
+    for (method_entity, mut method, method_location, ray_method) in method_query.iter_mut() {
         let method_position = method_location.translation();
-        let mut order = handler_query
-            .iter()
-            .map(|(e, field, field_location, _)| {
-                // add a bias to the forward direction?
-                let distance = field.distance2(field_location, method_position);
-                (e, distance)
-            })
-            .collect::<Vec<_>>();
-        order.sort_by(
-            |(_, distance1), (_, distance2)| match (distance1, distance2) {
-                (d1, d2) if d1 > d2 => Ordering::Greater,
-                (d1, d2) if d1 < d2 => Ordering::Less,
-                (d1, d2) if d1 == d2 => Ordering::Equal,
-                (_, _) => {
-                    error!("distance1 is not Greater, Less than or Equal to distance2");
-                    Ordering::Equal
-                }
-            },
-        );
-        let mut iter = handler_query.iter_many_mut(order.into_iter().map(|(e, _)| e));
+        let order = if let Some((ray, max_iters, min_step_size, hit_distance)) = ray_method {
+            raymarch_fields(
+                &ray.0,
+                &handler_query
+                    .transmute_lens::<(Entity, &Field, &GlobalTransform)>()
+                    .query(),
+                max_iters.unwrap_or(&Default::default()),
+                hit_distance.unwrap_or(&Default::default()),
+                min_step_size.unwrap_or(&Default::default()),
+            )
+        } else {
+            let mut o = handler_query
+                .iter()
+                .map(|(e, field, field_location, _)| {
+                    // add a bias to the forward direction?
+                    let distance = field.distance2(field_location, method_position);
+                    (e, distance)
+                })
+                .collect::<Vec<_>>();
+            o.sort_by(
+                |(_, distance1), (_, distance2)| match (distance1, distance2) {
+                    (d1, d2) if d1 > d2 => Ordering::Greater,
+                    (d1, d2) if d1 < d2 => Ordering::Less,
+                    (d1, d2) if d1 == d2 => Ordering::Equal,
+                    (_, _) => {
+                        error!("distance1 is not Greater, Less than or Equal to distance2");
+                        Ordering::Equal
+                    }
+                },
+            );
+            o.into_iter().map(|(e, _)| e).collect()
+        };
+        let mut iter = handler_query.iter_many_mut(order);
         while let Some((handler_entity, handler_field, handler_transform, mut handler)) =
             iter.fetch_next()
         {
@@ -209,7 +234,21 @@ impl Field {
 #[allow(clippy::type_complexity)]
 struct RunCaptureConditionsState(
     SystemState<(
-        Query<'static, 'static, (Entity, &'static mut InputMethod, &'static GlobalTransform)>,
+        Query<
+            'static,
+            'static,
+            (
+                Entity,
+                &'static mut InputMethod,
+                &'static GlobalTransform,
+                Option<(
+                    &'static PointerInputMethod,
+                    Option<&'static RaymarchMaxIterations>,
+                    Option<&'static RaymarchDefaultStepSize>,
+                    Option<&'static RaymarchHitDistance>,
+                )>,
+            ),
+        >,
         Query<
             'static,
             'static,
