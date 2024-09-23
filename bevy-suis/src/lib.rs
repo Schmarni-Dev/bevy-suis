@@ -8,7 +8,7 @@ use bevy::{
     },
     log::error,
     math::{Ray3d, Vec3},
-    prelude::{App, Entity, IntoSystemConfigs},
+    prelude::{App, Deref, Entity, IntoSystemConfigs},
     transform::components::{GlobalTransform, Transform},
 };
 use raymarching::{
@@ -16,7 +16,6 @@ use raymarching::{
 };
 use std::{cmp::Ordering, hash::Hash};
 pub mod debug;
-pub mod openxr_low_level_actions;
 pub mod raymarching;
 pub mod window_pointers;
 pub mod xr;
@@ -59,13 +58,17 @@ pub enum SuisPreUpdateSets {
     InputMethodCapturing,
 }
 
+#[derive(Clone, Copy, Debug, Component, Deref)]
+pub struct PreviousInputMehtodData(pub Entity);
+
 fn run_capture_conditions(world: &mut World) {
     let mut state = world
         .remove_resource::<RunCaptureConditionsState>()
         .unwrap_or_else(|| RunCaptureConditionsState(SystemState::new(world)));
-    let w = world.as_unsafe_world_cell();
     // SAFETY:
-    // idk might be fine, might not be fine
+    // NOT FINE! let's hope no one despawns a handler or method, or modifies any of the components
+    // that we reference
+    let w = world.as_unsafe_world_cell();
     let (mut method_query, mut handler_query) = unsafe { state.0.get_mut(w.world_mut()) };
     for (method_entity, mut method, method_location, ray_method) in method_query.iter_mut() {
         let method_position = method_location.translation();
@@ -84,7 +87,10 @@ fn run_capture_conditions(world: &mut World) {
                 .iter()
                 .map(|(e, field, field_location, _)| {
                     // add a bias to the forward direction?
-                    let distance = field.distance2(field_location, method_position);
+                    let distance = field
+                        .closest_point2(field_location, method_position)
+                        .distance(method_position);
+
                     (e, distance)
                 })
                 .collect::<Vec<_>>();
@@ -110,8 +116,6 @@ fn run_capture_conditions(world: &mut World) {
                 .compute_matrix()
                 .inverse()
                 .transform_point3(handler_field.closest_point2(handler_transform, method_position));
-            // SAFETY:
-            // idk might be fine, might not be fine
             handler
                 .capture_condition
                 .initialize(unsafe { w.world_mut() });
@@ -128,8 +132,6 @@ fn run_capture_conditions(world: &mut World) {
                     ),
                     closest_point,
                 },
-                // SAFETY:
-                // idk might be fine, might not be fine
                 unsafe { w.world_mut() },
             );
             if wants_to_capture {
