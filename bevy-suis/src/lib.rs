@@ -8,7 +8,7 @@ use bevy::{
     },
     log::error,
     math::{Ray3d, Vec3},
-    prelude::{App, Deref, Entity, IntoSystemConfigs},
+    prelude::{App, Cuboid, Deref, Entity, IntoSystemConfigs},
     transform::components::{GlobalTransform, Transform},
 };
 use raymarching::{
@@ -184,6 +184,7 @@ pub struct CaptureContext {
 #[derive(Component, Debug)]
 pub enum Field {
     Sphere(f32),
+    Cuboid(Cuboid),
 }
 impl Field {
     pub fn closest_point(
@@ -198,6 +199,7 @@ impl Field {
 
         let local_closest_point = match self {
             Field::Sphere(r) => local_point.normalize() * (local_point.length().min(*r)),
+            Field::Cuboid(cuboid) => cuboid.closest_point(local_point),
         };
 
         reference_to_this_transform
@@ -210,6 +212,7 @@ impl Field {
 
         let local_closest_point = match self {
             Field::Sphere(r) => local_point.normalize() * (local_point.length().min(*r)),
+            Field::Cuboid(cuboid) => cuboid.closest_point(local_point),
         };
 
         world_to_local_matrix
