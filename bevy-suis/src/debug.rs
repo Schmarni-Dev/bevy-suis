@@ -37,6 +37,12 @@ fn draw_fields(field_query: Query<(&GlobalTransform, &Field)>, mut gizmos: Gizmo
             Field::Sphere(r) => {
                 gizmos.sphere(field_pos, field_rot, *r, css::LIME);
             }
+            Field::Cuboid(cuboid) => gizmos.cuboid(
+                field
+                    .0
+                    .mul_transform(Transform::from_scale(cuboid.half_size * 2.0)),
+                css::LIME,
+            ),
         }
     }
 }
