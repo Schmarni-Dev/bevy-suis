@@ -7,7 +7,6 @@ use bevy::{
         system::{IntoSystem, Query, Resource, System, SystemState},
         world::World,
     },
-    log::error,
     math::{Ray3d, Vec3},
     prelude::{App, Cuboid, Deref, Entity, IntoSystemConfigs},
     transform::components::{GlobalTransform, Transform},
@@ -81,23 +80,23 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
         {
             let point = match pointer_method {
                 None => method_location.translation(),
-                Some((ray, max_iters, min_step_size, hit_distance)) => {
-                    raymarch_fields(
-                        &ray.0,
-                        vec![(handler, field, handler_transform)],
-                        max_iters.unwrap_or(&Default::default()),
-                        hit_distance.unwrap_or(&Default::default()),
-                        min_step_size.unwrap_or(&Default::default()),
-                    )
-                    .iter()
-                    .find(|(_, e)| *e == handler)
-                    .map(|(p, _)| *p);
-                    todo!()
-                }
+                Some((ray, max_iters, min_step_size, hit_distance)) => raymarch_fields(
+                    &ray.0,
+                    vec![(handler, field, handler_transform)],
+                    max_iters.unwrap_or(&Default::default()),
+                    hit_distance.unwrap_or(&Default::default()),
+                    min_step_size.unwrap_or(&Default::default()),
+                )
+                .iter()
+                .find(|(_, e)| *e == handler)
+                .map(|(p, _)| *p)
+                .unwrap_or(method_location.translation()),
             };
-            // TODO: make this a better default for hands and pointers
-            let closest_point =
-                field.closest_point2(handler_transform, method_location.translation());
+            // TODO: make this a better default for hands
+            let closest_point = handler_transform
+                .compute_matrix()
+                .inverse()
+                .transform_point3(field.closest_point2(handler_transform, point));
             methods.push(InnerInputHandlingContext {
                 input_method: method,
                 input_method_location: Transform::from_matrix(

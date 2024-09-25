@@ -12,3 +12,7 @@ schminput = { git = "https://github.com/Schmarni-Dev/schminput", features = [
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 bevy_mod_openxr = { git = "https://github.com/awtterpip/bevy_oxr" }
 openxr = { version = "0.18.0", default-features = false }
+
+[lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
