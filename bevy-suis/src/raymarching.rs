@@ -32,11 +32,11 @@ impl Default for RaymarchHitDistance {
 // Returns Entities sorted by distance from ray origin
 pub fn raymarch_fields(
     ray: &Ray3d,
-    fields: &Query<(Entity, &Field, &GlobalTransform)>,
+    fields: Vec<(Entity, &Field, &GlobalTransform)>,
     max_iterations: &RaymarchMaxIterations,
     hit_distance: &RaymarchHitDistance,
     default_step_size: &RaymarchDefaultStepSize,
-) -> Vec<Entity> {
+) -> Vec<(Vec3, Entity)> {
     raymarch(
         ray,
         fields,
@@ -54,26 +54,26 @@ pub fn raymarch_fields(
 #[allow(clippy::too_many_arguments)]
 fn raymarch(
     ray: &Ray3d,
-    fields: &Query<(Entity, &Field, &GlobalTransform)>,
+    fields: Vec<(Entity, &Field, &GlobalTransform)>,
     max_iterations: &RaymarchMaxIterations,
     hit_distance: &RaymarchHitDistance,
     min_step_size: &RaymarchDefaultStepSize,
     curr_iteration: u32,
     curr_distance: f32,
-    mut curr_handlers: Vec<(f32, Entity)>,
+    mut curr_handlers: Vec<(f32, Vec3, Entity)>,
     mut hit_handlers: EntityHashSet,
-) -> Vec<Entity> {
+) -> Vec<(Vec3, Entity)> {
     if curr_iteration > max_iterations.0.into() {
         return sort_map_vec(curr_handlers);
     }
-    // i don't think someone will try to use a pointer over a kilometer
-    if curr_distance > 1000.0 {
+    // i don't think someone will try to use a pointer over 10 kilometers
+    if curr_distance > 10000.0 {
         return sort_map_vec(curr_handlers);
     }
     let curr_point = ray.get_point(curr_distance);
     let mut step_size = None;
     for (handler, field, field_transform) in fields.iter() {
-        if hit_handlers.contains(&handler) {
+        if hit_handlers.contains(handler) {
             continue;
         }
         let closest_point = field.closest_point2(field_transform, curr_point);
@@ -82,8 +82,8 @@ fn raymarch(
             step_size = Some(distance);
         }
         if distance <= hit_distance.0 {
-            curr_handlers.push((distance, handler));
-            hit_handlers.insert(handler);
+            curr_handlers.push((distance, closest_point, *handler));
+            hit_handlers.insert(*handler);
         }
     }
     raymarch(
@@ -99,17 +99,9 @@ fn raymarch(
     )
 }
 
-fn sort_map_vec(mut vec: Vec<(f32, Entity)>) -> Vec<Entity> {
-    vec.sort_by(
-        |(distance1, _), (distance2, _)| match (distance1, distance2) {
-            (d1, d2) if d1 > d2 => Ordering::Greater,
-            (d1, d2) if d1 < d2 => Ordering::Less,
-            (d1, d2) if d1 == d2 => Ordering::Equal,
-            (_, _) => {
-                error!("distance1 is not Greater, Less than or Equal to distance2");
-                Ordering::Equal
-            }
-        },
-    );
-    vec.into_iter().map(|(_, e)| e).collect()
+fn sort_map_vec(mut vec: Vec<(f32, Vec3, Entity)>) -> Vec<(Vec3, Entity)> {
+    vec.sort_by(|(distance1, _, _), (distance2, _, _)| {
+        distance1.partial_cmp(distance2).unwrap_or(Ordering::Equal)
+    });
+    vec.into_iter().map(|(_, p, e)| (p, e)).collect()
 }

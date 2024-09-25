@@ -61,16 +61,40 @@ pub enum SuisPreUpdateSets {
 
 pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
     query: Query<(Entity, &Field, &GlobalTransform, &InputHandler), HandlerFilter>,
-    methods_query: Query<&GlobalTransform>,
+    methods_query: Query<(
+        &GlobalTransform,
+        Option<(
+            &PointerInputMethod,
+            Option<&RaymarchMaxIterations>,
+            Option<&RaymarchDefaultStepSize>,
+            Option<&RaymarchHitDistance>,
+        )>,
+    )>,
 ) -> Vec<InputHandlingContext> {
     let mut out = Vec::new();
     for (handler, field, handler_transform, handler_data) in query.iter() {
         let mut methods = Vec::new();
-        for (method, method_location) in handler_data
+        for (method, (method_location, pointer_method)) in handler_data
             .captured_methods
             .iter()
             .filter_map(|e| methods_query.get(*e).map(|v| (*e, v)).ok())
         {
+            let point = match pointer_method {
+                None => method_location.translation(),
+                Some((ray, max_iters, min_step_size, hit_distance)) => {
+                    raymarch_fields(
+                        &ray.0,
+                        vec![(handler, field, handler_transform)],
+                        max_iters.unwrap_or(&Default::default()),
+                        hit_distance.unwrap_or(&Default::default()),
+                        min_step_size.unwrap_or(&Default::default()),
+                    )
+                    .iter()
+                    .find(|(_, e)| *e == handler)
+                    .map(|(p, _)| *p);
+                    todo!()
+                }
+            };
             // TODO: make this a better default for hands and pointers
             let closest_point =
                 field.closest_point2(handler_transform, method_location.translation());
@@ -112,9 +136,7 @@ fn run_capture_conditions(world: &mut World) {
         let order = if let Some((ray, max_iters, min_step_size, hit_distance)) = ray_method {
             raymarch_fields(
                 &ray.0,
-                &handler_query
-                    .transmute_lens::<(Entity, &Field, &GlobalTransform)>()
-                    .query(),
+                handler_query.iter().map(|(e, f, t, _)| (e, f, t)).collect(),
                 max_iters.unwrap_or(&Default::default()),
                 hit_distance.unwrap_or(&Default::default()),
                 min_step_size.unwrap_or(&Default::default()),
@@ -123,36 +145,29 @@ fn run_capture_conditions(world: &mut World) {
             let mut o = handler_query
                 .iter()
                 .map(|(e, field, field_location, _)| {
-                    // add a bias to the forward direction?
-                    let distance = field
-                        .closest_point2(field_location, method_position)
-                        .distance(method_position);
+                    let point = field.closest_point2(field_location, method_position);
 
-                    (e, distance)
+                    let distance = point.distance(method_position);
+
+                    (e, distance, point)
                 })
                 .collect::<Vec<_>>();
-            o.sort_by(
-                |(_, distance1), (_, distance2)| match (distance1, distance2) {
-                    (d1, d2) if d1 > d2 => Ordering::Greater,
-                    (d1, d2) if d1 < d2 => Ordering::Less,
-                    (d1, d2) if d1 == d2 => Ordering::Equal,
-                    (_, _) => {
-                        error!("distance1 is not Greater, Less than or Equal to distance2");
-                        Ordering::Equal
-                    }
-                },
-            );
-            o.into_iter().map(|(e, _)| e).collect()
+            o.sort_by(|(_, distance1, _), (_, distance2, _)| {
+                distance1.partial_cmp(distance2).unwrap_or(Ordering::Equal)
+            });
+            o.into_iter().map(|(e, _, p)| (p, e)).collect()
         };
-        let mut iter = handler_query.iter_many_mut(order);
-        while let Some((handler_entity, handler_field, handler_transform, mut handler)) =
-            iter.fetch_next()
-        {
+        for (point, handler_entity) in order.into_iter() {
+            let Ok((handler_entity, handler_field, handler_transform, mut handler)) =
+                handler_query.get_mut(handler_entity)
+            else {
+                continue;
+            };
             // send a precomputed distance?
             let closest_point = handler_transform
                 .compute_matrix()
                 .inverse()
-                .transform_point3(handler_field.closest_point2(handler_transform, method_position));
+                .transform_point3(point);
             handler
                 .capture_condition
                 .initialize(unsafe { w.world_mut() });
