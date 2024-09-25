@@ -2,6 +2,7 @@ use bevy::{
     app::{Plugin, PreUpdate},
     ecs::{
         component::Component,
+        query::QueryFilter,
         schedule::SystemSet,
         system::{IntoSystem, Query, Resource, System, SystemState},
         world::World,
@@ -56,6 +57,42 @@ fn clear_captures(mut query: Query<&mut InputMethod>, mut handler_query: Query<&
 pub enum SuisPreUpdateSets {
     UpdateInputMethods,
     InputMethodCapturing,
+}
+
+pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
+    query: Query<(Entity, &Field, &GlobalTransform, &InputHandler), HandlerFilter>,
+    methods_query: Query<&GlobalTransform>,
+) -> Vec<InputHandlingContext> {
+    let mut out = Vec::new();
+    for (handler, field, handler_transform, handler_data) in query.iter() {
+        let mut methods = Vec::new();
+        for (method, method_location) in handler_data
+            .captured_methods
+            .iter()
+            .filter_map(|e| methods_query.get(*e).map(|v| (*e, v)).ok())
+        {
+            // TODO: make this a better default for hands and pointers
+            let closest_point =
+                field.closest_point2(handler_transform, method_location.translation());
+            methods.push(InnerInputHandlingContext {
+                input_method: method,
+                input_method_location: Transform::from_matrix(
+                    handler_transform
+                        .compute_matrix()
+                        .inverse()
+                        .mul_mat4(&method_location.compute_matrix()),
+                ),
+                closest_point,
+            });
+        }
+        out.push(InputHandlingContext {
+            handler,
+            handler_location: *handler_transform,
+            methods,
+        })
+    }
+
+    out
 }
 
 #[derive(Clone, Copy, Debug, Component, Deref)]
@@ -143,6 +180,19 @@ fn run_capture_conditions(world: &mut World) {
     }
 
     world.insert_resource(state);
+}
+pub struct InputHandlingContext {
+    pub handler: Entity,
+    pub handler_location: GlobalTransform,
+    pub methods: Vec<InnerInputHandlingContext>,
+}
+
+pub struct InnerInputHandlingContext {
+    pub input_method: Entity,
+    /// Location in handlers local space
+    pub input_method_location: Transform,
+    /// Point in handlers local space
+    pub closest_point: Vec3,
 }
 
 #[derive(Component, Debug, Default)]
