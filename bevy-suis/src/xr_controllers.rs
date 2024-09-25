@@ -1,10 +1,12 @@
 use bevy::prelude::*;
+#[cfg(not(target_family = "wasm"))]
 use bevy_mod_xr::{
     hands::{LeftHand, RightHand},
     session::{XrPreDestroySession, XrSessionCreated, XrState, XrTrackingRoot},
 };
+#[cfg(not(target_family = "wasm"))]
+use schminput::openxr::{AttachSpaceToEntity, OxrInputPlugin};
 use schminput::{
-    openxr::{AttachSpaceToEntity, OxrInputPlugin},
     prelude::*,
     SchminputPlugin, SchminputSet,
 };
@@ -14,6 +16,7 @@ use crate::{xr::HandSide, InputMethod};
 pub struct SuisXrControllerPlugin;
 
 impl Plugin for SuisXrControllerPlugin {
+    #[cfg(not(target_family = "wasm"))]
     fn build(&self, app: &mut App) {
         if *app.world().resource::<XrState>() == XrState::Unavailable {
             return;
@@ -34,8 +37,11 @@ impl Plugin for SuisXrControllerPlugin {
                 .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
         );
     }
+    #[cfg(target_family = "wasm")]
+    fn build(&self, app: &mut App) {}
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn update_method_data(
     bool_query: Query<&BoolActionValue>,
     mut method_query: Query<(&mut XrControllerInputMethodData, &HandSide), With<InputMethod>>,
@@ -67,6 +73,7 @@ fn update_method_data(
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[allow(dead_code)]
 #[derive(Clone, Copy, Resource)]
 struct Actions {
@@ -80,6 +87,7 @@ struct Actions {
     method_pose_right: Entity,
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
     let set = cmds
         .spawn(ActionSetBundle::new(
@@ -210,6 +218,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
     });
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn despawn_input_methods(
     mut cmds: Commands,
     query: Query<Entity, With<XrControllerInputMethodData>>,
@@ -218,6 +227,7 @@ fn despawn_input_methods(
         cmds.entity(e).remove::<InputMethod>();
     }
 }
+#[cfg(not(target_family = "wasm"))]
 fn spawn_input_methods(
     mut cmds: Commands,
     query: Query<Entity, With<XrControllerInputMethodData>>,

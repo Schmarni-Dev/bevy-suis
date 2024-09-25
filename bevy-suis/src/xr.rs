@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+#[cfg(not(target_family = "wasm"))]
 use bevy_mod_openxr::{
     features::handtracking::{spawn_hand_bones, OxrHandTracker},
     session::OxrSession,
@@ -12,6 +13,7 @@ use crate::{InputMethod, SuisPreUpdateSets};
 
 pub struct SuisXrPlugin;
 impl Plugin for SuisXrPlugin {
+    #[cfg(not(target_family = "wasm"))]
     fn build(&self, app: &mut App) {
         app.add_systems(XrSessionCreated, spawn_input_hands);
         app.add_systems(XrPreDestroySession, despawn_input_hands);
@@ -20,6 +22,8 @@ impl Plugin for SuisXrPlugin {
             update_hand_input_methods.in_set(SuisPreUpdateSets::UpdateInputMethods),
         );
     }
+    #[cfg(target_family = "wasm")]
+    fn build(&self, app: &mut App) {}
 }
 
 #[derive(Component, Clone, Copy)]
@@ -88,6 +92,7 @@ impl Default for HandInputMethodData {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn update_hand_input_methods(
     mut hand_method_query: Query<
         (&mut HandInputMethodData, &mut Transform, &SuisXrHandTracker),
@@ -122,6 +127,7 @@ pub enum HandSide {
 #[derive(Clone, Copy, Component, Debug)]
 pub struct SuisInputXrHand;
 
+#[cfg(not(target_family = "wasm"))]
 #[allow(clippy::type_complexity)]
 fn despawn_input_hands(
     mut cmds: Commands,
@@ -132,6 +138,7 @@ fn despawn_input_hands(
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn spawn_input_hands(
     mut cmds: Commands,
     session: Res<OxrSession>,
