@@ -104,7 +104,8 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
                         .compute_matrix()
                         .inverse()
                         .mul_mat4(&method_location.compute_matrix()),
-                ),
+                )
+                .with_translation(point),
                 closest_point,
             });
         }
@@ -180,7 +181,8 @@ fn run_capture_conditions(world: &mut World) {
                             .compute_matrix()
                             .inverse()
                             .mul_mat4(&method_location.compute_matrix()),
-                    ),
+                    )
+                    .with_translation(point),
                     closest_point,
                 },
                 unsafe { w.world_mut() },
