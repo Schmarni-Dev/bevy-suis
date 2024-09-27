@@ -6,10 +6,7 @@ use bevy_mod_xr::{
 };
 #[cfg(not(target_family = "wasm"))]
 use schminput::openxr::{AttachSpaceToEntity, OxrInputPlugin};
-use schminput::{
-    prelude::*,
-    SchminputPlugin, SchminputSet,
-};
+use schminput::{prelude::*, SchminputPlugin, SchminputSet};
 
 use crate::{xr::HandSide, InputMethod};
 
@@ -33,7 +30,6 @@ impl Plugin for SuisXrControllerPlugin {
             PreUpdate,
             update_method_data
                 .after(SchminputSet::SyncInputActions)
-                // probably not needed
                 .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
         );
     }
@@ -44,6 +40,7 @@ impl Plugin for SuisXrControllerPlugin {
 #[cfg(not(target_family = "wasm"))]
 fn update_method_data(
     bool_query: Query<&BoolActionValue>,
+    vec2_query: Query<&Vec2ActionValue>,
     mut method_query: Query<(&mut XrControllerInputMethodData, &HandSide), With<InputMethod>>,
     actions: Res<Actions>,
 ) {
@@ -59,15 +56,23 @@ fn update_method_data(
     let squeezed_right = bool_query
         .get(actions.squeezed_right)
         .expect("not a bool action?");
+    let stick_pos_left = vec2_query
+        .get(actions.stick_pos_left)
+        .expect("not a Vec2 action?");
+    let stick_pos_right = vec2_query
+        .get(actions.stick_pos_right)
+        .expect("not a Vec2 action?");
     for (mut data, side) in &mut method_query {
         match side {
             HandSide::Left => {
                 data.trigger_pulled = trigger_pulled_left.any;
                 data.squeezed = squeezed_left.any;
+                data.stick_pos = stick_pos_left.any;
             }
             HandSide::Right => {
                 data.trigger_pulled = trigger_pulled_right.any;
                 data.squeezed = squeezed_right.any;
+                data.stick_pos = stick_pos_right.any;
             }
         }
     }
@@ -83,6 +88,8 @@ struct Actions {
     trigger_pulled_right: Entity,
     squeezed_left: Entity,
     squeezed_right: Entity,
+    stick_pos_left: Entity,
+    stick_pos_right: Entity,
     method_pose_left: Entity,
     method_pose_right: Entity,
 }
@@ -206,6 +213,37 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
                 .end(),
         )
         .id();
+    let stick_pos_left = cmds
+        .spawn(ActionBundle::new(
+            "stick_value_left",
+            "Left Stick Position",
+            set,
+        ))
+        .insert(Vec2ActionValue::default())
+        // TODO: add more bindings
+        .insert(
+            OxrActionBlueprint::default()
+                .interaction_profile(OCULUS_TOUCH_PROFILE)
+                .binding("/user/hand/left/input/thumbstick")
+                .end(),
+        )
+        .id();
+
+    let stick_pos_right = cmds
+        .spawn(ActionBundle::new(
+            "stick_value_right",
+            "Right Stick Position",
+            set,
+        ))
+        .insert(Vec2ActionValue::default())
+        // TODO: add more bindings
+        .insert(
+            OxrActionBlueprint::default()
+                .interaction_profile(OCULUS_TOUCH_PROFILE)
+                .binding("/user/hand/right/input/thumbstick")
+                .end(),
+        )
+        .id();
 
     cmds.insert_resource(Actions {
         set,
@@ -215,6 +253,8 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         squeezed_right,
         method_pose_left,
         method_pose_right,
+        stick_pos_left,
+        stick_pos_right,
     });
 }
 
@@ -241,6 +281,5 @@ fn spawn_input_methods(
 pub struct XrControllerInputMethodData {
     pub trigger_pulled: bool,
     pub squeezed: bool,
-    // pub trigger: Entity,
-    // pub squeeze: Entity,
+    pub stick_pos: Vec2,
 }
