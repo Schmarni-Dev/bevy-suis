@@ -92,6 +92,10 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
                 .map(|(p, _)| *p)
                 .unwrap_or(method_location.translation()),
             };
+            let point = handler_transform
+                .compute_matrix()
+                .inverse()
+                .transform_point3(point);
             // TODO: make this a better default for hands
             let closest_point = handler_transform
                 .compute_matrix()
@@ -149,7 +153,7 @@ fn run_capture_conditions(world: &mut World) {
 
                     let distance = point.distance(method_position);
 
-                    (e, distance, point)
+                    (e, distance, method_position)
                 })
                 .collect::<Vec<_>>();
             o.sort_by(|(_, distance1, _), (_, distance2, _)| {
@@ -163,8 +167,12 @@ fn run_capture_conditions(world: &mut World) {
             else {
                 continue;
             };
-            // send a precomputed distance?
             let closest_point = handler_transform
+                .compute_matrix()
+                .inverse()
+                .transform_point3(handler_field.closest_point2(handler_transform, point));
+            // send a precomputed distance?
+            let point = handler_transform
                 .compute_matrix()
                 .inverse()
                 .transform_point3(point);
