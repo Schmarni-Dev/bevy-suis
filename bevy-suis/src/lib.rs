@@ -134,9 +134,6 @@ fn run_capture_conditions(world: &mut World) {
     let mut state = world
         .remove_resource::<RunCaptureConditionsState>()
         .unwrap_or_else(|| RunCaptureConditionsState(SystemState::new(world)));
-    // SAFETY:
-    // NOT FINE! let's hope no one despawns a handler or method, or modifies any of the components
-    // that we reference
     let (mut method_query, handler_query) = state.0.get_mut(world);
     let mut interactions: EntityHashMap<Vec<(Vec3, Entity)>> = default();
     for (method_entity, method_location, ray_method) in method_query.iter_mut() {
