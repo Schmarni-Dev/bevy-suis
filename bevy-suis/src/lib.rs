@@ -2,13 +2,14 @@ use bevy::{
     app::{Plugin, PreUpdate},
     ecs::{
         component::Component,
+        entity::EntityHashMap,
         query::QueryFilter,
         schedule::SystemSet,
         system::{IntoSystem, Query, Resource, System, SystemState},
         world::World,
     },
     math::{Ray3d, Vec3},
-    prelude::{App, Cuboid, Deref, Entity, IntoSystemConfigs},
+    prelude::{default, App, Cuboid, Deref, Entity, IntoSystemConfigs},
     transform::components::{GlobalTransform, Transform},
 };
 use raymarching::{
@@ -43,7 +44,10 @@ impl Plugin for SuisCorePlugin {
 #[derive(Component, Clone, Copy, Debug)]
 pub struct PointerInputMethod(pub Ray3d);
 
-fn clear_captures(mut query: Query<&mut InputMethod>, mut handler_query: Query<&mut InputHandler>) {
+fn clear_captures(
+    mut query: Query<&mut InputMethod>,
+    mut handler_query: Query<&mut InputHandlerCaptures>,
+) {
     for mut method in &mut query {
         method.captured_by = None;
     }
@@ -59,7 +63,7 @@ pub enum SuisPreUpdateSets {
 }
 
 pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
-    query: Query<(Entity, &Field, &GlobalTransform, &InputHandler), HandlerFilter>,
+    query: Query<(Entity, &Field, &GlobalTransform, &InputHandlerCaptures), HandlerFilter>,
     methods_query: Query<(
         &GlobalTransform,
         Option<(
@@ -133,14 +137,14 @@ fn run_capture_conditions(world: &mut World) {
     // SAFETY:
     // NOT FINE! let's hope no one despawns a handler or method, or modifies any of the components
     // that we reference
-    let w = world.as_unsafe_world_cell();
-    let (mut method_query, mut handler_query) = unsafe { state.0.get_mut(w.world_mut()) };
-    for (method_entity, mut method, method_location, ray_method) in method_query.iter_mut() {
+    let (mut method_query, handler_query) = state.0.get_mut(world);
+    let mut interactions: EntityHashMap<Vec<(Vec3, Entity)>> = default();
+    for (method_entity, method_location, ray_method) in method_query.iter_mut() {
         let method_position = method_location.translation();
         let order = if let Some((ray, max_iters, min_step_size, hit_distance)) = ray_method {
             raymarch_fields(
                 &ray.0,
-                handler_query.iter().map(|(e, f, t, _)| (e, f, t)).collect(),
+                handler_query.iter().collect(),
                 max_iters.unwrap_or(&Default::default()),
                 hit_distance.unwrap_or(&Default::default()),
                 min_step_size.unwrap_or(&Default::default()),
@@ -148,7 +152,7 @@ fn run_capture_conditions(world: &mut World) {
         } else {
             let mut o = handler_query
                 .iter()
-                .map(|(e, field, field_location, _)| {
+                .map(|(e, field, field_location)| {
                     let point = field.closest_point2(field_location, method_position);
 
                     let distance = point.distance(method_position);
@@ -161,28 +165,48 @@ fn run_capture_conditions(world: &mut World) {
             });
             o.into_iter().map(|(e, _, p)| (p, e)).collect()
         };
+        interactions.insert(method_entity, order);
+    }
+    for (method_entity, order) in interactions.into_iter() {
+        fn x(world: &mut World, entity: Entity) -> Option<(Entity, InputMethod, GlobalTransform)> {
+            let mut e = world.get_entity_mut(entity)?;
+            Some((entity, e.take()?, e.get().copied()?))
+        }
+        let Some((method_entity, mut method, method_location)) = x(world, method_entity) else {
+            continue;
+        };
         for (point, handler_entity) in order.into_iter() {
-            let Ok((handler_entity, handler_field, handler_transform, mut handler)) =
-                handler_query.get_mut(handler_entity)
+            fn x(
+                world: &mut World,
+                entity: Entity,
+            ) -> Option<(Entity, Field, GlobalTransform, InputHandler)> {
+                let mut e = world.get_entity_mut(entity)?;
+                Some((
+                    entity,
+                    e.get::<Field>().copied()?,
+                    e.get::<GlobalTransform>().copied()?,
+                    e.take::<InputHandler>()?,
+                ))
+            }
+            let Some((handler_entity, handler_field, handler_transform, mut handler)) =
+                x(world, handler_entity)
             else {
                 continue;
             };
             let closest_point = handler_transform
                 .compute_matrix()
                 .inverse()
-                .transform_point3(handler_field.closest_point2(handler_transform, point));
+                .transform_point3(handler_field.closest_point2(&handler_transform, point));
             // send a precomputed distance?
             let point = handler_transform
                 .compute_matrix()
                 .inverse()
                 .transform_point3(point);
-            handler
-                .capture_condition
-                .initialize(unsafe { w.world_mut() });
+            handler.capture_condition.initialize(world);
             let wants_to_capture = handler.capture_condition.run(
                 CaptureContext {
                     handler: handler_entity,
-                    handler_location: *handler_transform,
+                    handler_location: handler_transform,
                     input_method: method_entity,
                     input_method_location: Transform::from_matrix(
                         handler_transform
@@ -193,16 +217,23 @@ fn run_capture_conditions(world: &mut World) {
                     .with_translation(point),
                     closest_point,
                 },
-                unsafe { w.world_mut() },
+                world,
             );
+
+            let mut e = world.entity_mut(handler_entity);
+            let mut captures = e.take::<InputHandlerCaptures>().unwrap_or_default();
             if wants_to_capture {
                 method.captured_by = Some(handler_entity);
-                handler.captured_methods.push(method_entity);
+                captures.captured_methods.push(method_entity);
+            }
+            e.insert(captures);
+            e.insert(handler);
+            if wants_to_capture {
                 break;
             }
         }
+        world.entity_mut(method_entity).insert(method);
     }
-
     world.insert_resource(state);
 }
 pub struct InputHandlingContext {
@@ -230,17 +261,20 @@ impl InputMethod {
     }
 }
 
+#[derive(Component, Debug, Default)]
+pub struct InputHandlerCaptures {
+    pub captured_methods: Vec<Entity>,
+}
+
 #[derive(Component, Debug)]
 pub struct InputHandler {
     pub capture_condition: Box<dyn System<In = CaptureContext, Out = bool>>,
-    pub captured_methods: Vec<Entity>,
 }
 
 impl InputHandler {
     pub fn new<T>(system: impl IntoSystem<CaptureContext, bool, T>) -> InputHandler {
         InputHandler {
             capture_condition: Box::new(IntoSystem::into_system(system)),
-            captured_methods: Vec::new(),
         }
     }
 }
@@ -255,7 +289,7 @@ pub struct CaptureContext {
     pub closest_point: Vec3,
 }
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Clone, Copy)]
 pub enum Field {
     Sphere(f32),
     Cuboid(Cuboid),
@@ -318,7 +352,6 @@ struct RunCaptureConditionsState(
             'static,
             (
                 Entity,
-                &'static mut InputMethod,
                 &'static GlobalTransform,
                 Option<(
                     &'static PointerInputMethod,
@@ -328,15 +361,6 @@ struct RunCaptureConditionsState(
                 )>,
             ),
         >,
-        Query<
-            'static,
-            'static,
-            (
-                Entity,
-                &'static Field,
-                &'static GlobalTransform,
-                &'static mut InputHandler,
-            ),
-        >,
+        Query<'static, 'static, (Entity, &'static Field, &'static GlobalTransform)>,
     )>,
 );

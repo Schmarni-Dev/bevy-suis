@@ -1,6 +1,6 @@
-use bevy::{color::palettes::css, prelude::*};
+use bevy::prelude::*;
 use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
-use bevy_mod_xr::{session::XrSessionCreated, types::XrPose};
+use bevy_mod_xr::session::XrSessionCreated;
 use bevy_suis::{
     debug::SuisDebugGizmosPlugin, xr::SuisXrPlugin, xr_controllers::SuisXrControllerPlugin,
     CaptureContext, Field, InputHandler, SuisCorePlugin,
@@ -44,11 +44,7 @@ fn setup(mut cmds: Commands) {
     cmds.spawn((Camera3dBundle::default(), Cam));
 }
 
-fn capture_condition(ctx: In<CaptureContext>, query: Query<&Field>) -> bool {
-    let Ok(field) = query.get(ctx.handler) else {
-        warn!("Handler Somehow doesn't have a field?!");
-        return false;
-    };
+fn capture_condition(ctx: In<CaptureContext>) -> bool {
     ctx.closest_point
         .distance(ctx.input_method_location.translation)
         <= f32::EPSILON

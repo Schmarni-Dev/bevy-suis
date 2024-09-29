@@ -1,8 +1,9 @@
 use bevy::{color::palettes::css, prelude::*};
-use bevy_suis::Field;
+use bevy_suis::{debug::SuisDebugGizmosPlugin, Field, SuisCorePlugin};
 fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins((SuisCorePlugin, SuisDebugGizmosPlugin))
         .add_systems(Startup, setup)
         .add_systems(Update, (move_pointer, draw_things).chain())
         .run()
@@ -53,14 +54,7 @@ fn draw_things(
 ) {
     let field = field_query.single();
     let pointer = pointer_query.single();
-    let (_, field_rot, field_pos) = field.0.to_scale_rotation_translation();
-    match field.1 {
-        Field::Sphere(r) => {
-            giz.sphere(field_pos, field_rot, *r, css::LIME);
-        }
-    }
     let closest_point = field.1.closest_point2(field.0, pointer.translation());
     giz.axes(*pointer, 0.05);
     giz.sphere(closest_point, Quat::IDENTITY, 0.01, css::MAGENTA);
-    // giz.sphere(closest_point, Quat::IDENTITY, 0.01, css::GOLD);
 }

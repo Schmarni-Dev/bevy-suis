@@ -9,7 +9,7 @@ use bevy_suis::{
     window_pointers::{MouseInputMethodData, SuisWindowPointerPlugin},
     xr::{Hand, HandInputMethodData, SuisXrPlugin},
     xr_controllers::{SuisXrControllerPlugin, XrControllerInputMethodData},
-    CaptureContext, Field, InputHandler, PointerInputMethod, SuisCorePlugin,
+    CaptureContext, Field, InputHandler, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
 };
 use openxr::ReferenceSpaceType;
 
@@ -47,7 +47,7 @@ fn move_grabble(
     mut grabbles: Query<
         (
             Entity,
-            &InputHandler,
+            &InputHandlerCaptures,
             &GlobalTransform,
             &mut Transform,
             Option<&Grabbed>,
@@ -145,7 +145,7 @@ fn capture_condition(
         Has<PointerInputMethod>,
         Option<&MouseInputMethodData>,
     )>,
-    handler_query: Query<&InputHandler>,
+    handler_query: Query<&InputHandlerCaptures>,
 ) -> bool {
     // Only Capture one method
     if !handler_query
@@ -159,7 +159,7 @@ fn capture_condition(
         .distance(ctx.input_method_location.translation);
 
     // threshold needed to be this high else controllers wouldn't rellieably capture, idk why
-    let mut capture = method_distance <= f32::EPSILON;
+    let mut capture = method_distance <= 0.001;
     let Ok((hand_data, is_pointer, mouse_data)) = query.get(ctx.input_method) else {
         return capture;
     };
