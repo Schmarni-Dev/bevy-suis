@@ -8,7 +8,6 @@ use bevy_mod_xr::{
 use schminput::openxr::{AttachSpaceToEntity, OxrInputPlugin};
 use schminput::{prelude::*, SchminputPlugin, SchminputSet};
 
-#[cfg(not(target_family = "wasm"))]
 use crate::InputMethodActive;
 #[cfg(not(target_family = "wasm"))]
 use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;

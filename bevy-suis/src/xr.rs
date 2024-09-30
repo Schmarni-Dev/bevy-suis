@@ -1,4 +1,7 @@
+use crate::InputMethodActive;
 use bevy::prelude::*;
+#[cfg(not(target_family = "wasm"))]
+use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
 #[cfg(not(target_family = "wasm"))]
 use bevy_mod_openxr::{
     features::handtracking::{spawn_hand_bones, OxrHandTracker},
@@ -95,13 +98,21 @@ impl Default for HandInputMethodData {
 #[cfg(not(target_family = "wasm"))]
 fn update_hand_input_methods(
     mut hand_method_query: Query<
-        (&mut HandInputMethodData, &mut Transform, &SuisXrHandTracker),
+        (
+            &mut HandInputMethodData,
+            &mut Transform,
+            &SuisXrHandTracker,
+            &mut InputMethodActive,
+        ),
         With<InputMethod>,
     >,
+    flag_query: Query<&OxrSpaceLocationFlags>,
     xr_hand_tracker_query: Query<&XrHandBoneEntities>,
     xr_hand_joint_query: Query<(&GlobalTransform, &HandBoneRadius)>,
 ) {
-    for (mut hand_data, mut method_transform, tracker) in &mut hand_method_query {
+    use openxr::SpaceLocationFlags;
+
+    for (mut hand_data, mut method_transform, tracker, mut active) in &mut hand_method_query {
         let Ok(joint_entities) = xr_hand_tracker_query.get(tracker.0) else {
             warn!("unable to get hand tracker entity");
             continue;
@@ -110,6 +121,13 @@ fn update_hand_input_methods(
             warn!("unable to get hand joints");
             continue;
         };
+        let flags = flag_query
+            .get(joint_entities[HandBone::IndexTip as usize])
+            .map(|v| v.0)
+            .unwrap_or(SpaceLocationFlags::EMPTY);
+        active.0 = flags.contains(SpaceLocationFlags::POSITION_TRACKED)
+            || flags.contains(SpaceLocationFlags::ORIENTATION_TRACKED);
+
         let hand = Hand::from_data(&joints);
         *method_transform = joints[HandBone::IndexTip as usize].0.compute_transform();
         hand_data.set_in_global_space(hand);
