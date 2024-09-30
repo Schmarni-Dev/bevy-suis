@@ -90,7 +90,7 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
                 .map(|(p, _)| *p)
                 .unwrap_or(method_location.translation()),
             };
-            let point = handler_transform
+            let point_local = handler_transform
                 .compute_matrix()
                 .inverse()
                 .transform_point3(point);
@@ -107,7 +107,7 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
                         .inverse()
                         .mul_mat4(&method_location.compute_matrix()),
                 )
-                .with_translation(point),
+                .with_translation(point_local),
                 closest_point,
             });
         }

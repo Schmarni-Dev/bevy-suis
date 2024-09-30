@@ -14,7 +14,10 @@ pub struct Pointer;
 
 fn setup(mut cmds: Commands) {
     cmds.spawn(Pointer).insert(SpatialBundle::default());
-    cmds.spawn(Field::Sphere(0.5))
+    // cmds.spawn(Field::Sphere(0.5))
+    //     .insert(SpatialBundle::default())
+    //     .insert(Transform::from_xyz(0.0, -1.0, 0.0));
+    cmds.spawn(Field::Cuboid(Cuboid::new(1., 2., 3.)))
         .insert(SpatialBundle::default())
         .insert(Transform::from_xyz(0.0, -1.0, 0.0));
     cmds.spawn(Camera3dBundle::default())
