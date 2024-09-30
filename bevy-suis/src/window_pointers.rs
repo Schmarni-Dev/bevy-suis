@@ -5,7 +5,7 @@ use bevy::{
     window::{PrimaryWindow, WindowRef},
 };
 
-use crate::{InputMethod, PointerInputMethod, SuisPreUpdateSets};
+use crate::{InputMethod, InputMethodActive, PointerInputMethod, SuisPreUpdateSets};
 
 pub struct SuisWindowPointerPlugin;
 
@@ -81,6 +81,7 @@ fn spawn_input_methods(
     mut cmds: Commands,
     has: Query<Has<SuisWindowCursor>>,
 ) {
+    info!("spawn");
     if t.entity() == Entity::PLACEHOLDER {
         warn_once!("OnAdd Called with Placeholder entity?!");
         return;
@@ -155,7 +156,11 @@ fn update_input_method_ray(
     primary_window: Query<Entity, With<PrimaryWindow>>,
     cams: Query<(&Camera, &GlobalTransform)>,
     windows: Query<(&Window, &SuisWindowCursor)>,
-    mut input_method: Query<(&mut PointerInputMethod, &mut Transform)>,
+    mut input_method: Query<(
+        &mut PointerInputMethod,
+        &mut Transform,
+        &mut InputMethodActive,
+    )>,
 ) {
     let Ok(primary_window) = primary_window.get_single() else {
         warn_once!("no primary window?");
@@ -175,20 +180,22 @@ fn update_input_method_ray(
             error_once!("Invalid window entity!");
             continue;
         };
+        let Ok((mut method, mut transform, mut active)) = input_method.get_mut(suis_cursor.0)
+        else {
+            error!("unable to get input method for window");
+            continue;
+        };
         if let Some(pos) = window.cursor_position() {
+            active.0 = true;
             if let Some(pos) = get_viewport_pos(pos, camera) {
                 if let Some(ray) = camera.viewport_to_world(cam_transform, pos) {
-                    let Ok((mut method, mut transform)) = input_method.get_mut(suis_cursor.0)
-                    else {
-                        error!("unable to get input method for window");
-                        continue;
-                    };
                     method.0 = ray;
-                    // Remove this?
                     transform.translation = ray.origin;
                     transform.look_at(ray.origin + *ray.direction, Dir3::Y);
                 }
             }
+        } else {
+            active.0 = false;
         }
     }
 }

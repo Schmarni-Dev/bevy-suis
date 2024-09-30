@@ -1,17 +1,9 @@
-use bevy::{
-    app::{Plugin, PreUpdate},
-    ecs::{
-        component::Component,
-        entity::EntityHashMap,
-        query::QueryFilter,
-        schedule::SystemSet,
-        system::{IntoSystem, Query, Resource, System, SystemState},
-        world::World,
-    },
-    math::{Ray3d, Vec3},
-    prelude::{default, App, Cuboid, Deref, Entity, IntoSystemConfigs},
-    transform::components::{GlobalTransform, Transform},
+use bevy::ecs::{
+    entity::{EntityHashMap, EntityHashSet},
+    query::QueryFilter,
+    system::{RunSystemOnce, System, SystemState},
 };
+use bevy::prelude::*;
 use raymarching::{
     raymarch_fields, RaymarchDefaultStepSize, RaymarchHitDistance, RaymarchMaxIterations,
 };
@@ -40,8 +32,10 @@ impl Plugin for SuisCorePlugin {
         );
     }
 }
+#[derive(Deref, DerefMut, Debug, Clone, Copy, Component)]
+pub struct InputMethodActive(pub bool);
 
-#[derive(Component, Clone, Copy, Debug)]
+#[derive(Deref, DerefMut, Debug, Clone, Copy, Component)]
 pub struct PointerInputMethod(pub Ray3d);
 
 fn clear_captures(
@@ -123,7 +117,6 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
             methods,
         })
     }
-
     out
 }
 
@@ -134,10 +127,21 @@ fn run_capture_conditions(world: &mut World) {
     let mut state = world
         .remove_resource::<RunCaptureConditionsState>()
         .unwrap_or_else(|| RunCaptureConditionsState(SystemState::new(world)));
+    let mut insert_active = EntityHashSet::default();
     let (mut method_query, handler_query) = state.0.get_mut(world);
     let mut interactions: EntityHashMap<Vec<(Vec3, Entity)>> = default();
-    for (method_entity, method_location, ray_method) in method_query.iter_mut() {
+    for (method_entity, method_location, active, ray_method) in method_query.iter_mut() {
         let method_position = method_location.translation();
+        match active {
+            Some(v) => {
+                if !v.0 {
+                    continue;
+                }
+            }
+            None => {
+                insert_active.insert(method_entity);
+            }
+        }
         let order = if let Some((ray, max_iters, min_step_size, hit_distance)) = ray_method {
             raymarch_fields(
                 &ray.0,
@@ -163,6 +167,9 @@ fn run_capture_conditions(world: &mut World) {
             o.into_iter().map(|(e, _, p)| (p, e)).collect()
         };
         interactions.insert(method_entity, order);
+    }
+    for e in insert_active.into_iter() {
+        world.entity_mut(e).insert(InputMethodActive(true));
     }
     for (method_entity, order) in interactions.into_iter() {
         fn x(world: &mut World, entity: Entity) -> Option<(Entity, InputMethod, GlobalTransform)> {
@@ -216,7 +223,6 @@ fn run_capture_conditions(world: &mut World) {
                 },
                 world,
             );
-
             let mut e = world.entity_mut(handler_entity);
             let mut captures = e.take::<InputHandlerCaptures>().unwrap_or_default();
             if wants_to_capture {
@@ -350,6 +356,7 @@ struct RunCaptureConditionsState(
             (
                 Entity,
                 &'static GlobalTransform,
+                Option<&'static InputMethodActive>,
                 Option<(
                     &'static PointerInputMethod,
                     Option<&'static RaymarchMaxIterations>,
