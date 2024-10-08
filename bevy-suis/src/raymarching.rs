@@ -1,6 +1,9 @@
 use std::{cmp::Ordering, num::NonZeroU32};
 
-use bevy::{ecs::entity::EntityHashSet, prelude::*};
+use bevy::{
+    ecs::entity::{EntityHashMap, EntityHashSet},
+    prelude::*,
+};
 
 use crate::Field;
 
@@ -45,9 +48,15 @@ pub fn raymarch_fields(
         default_step_size,
         0,
         0.0,
-        Vec::new(),
+        EntityHashMap::default(),
         EntityHashSet::default(),
     )
+}
+
+struct RaymarchData {
+    distance_on_ray: f32,
+    distance_to_closest_point: f32,
+    closest_point: Vec3,
 }
 
 // this is probably very slow, but i don't care for now
@@ -60,15 +69,15 @@ fn raymarch(
     min_step_size: &RaymarchDefaultStepSize,
     curr_iteration: u32,
     curr_distance: f32,
-    mut curr_handlers: Vec<(f32, Vec3, Entity)>,
+    mut curr_handlers: EntityHashMap<RaymarchData>,
     mut hit_handlers: EntityHashSet,
 ) -> Vec<(Vec3, Entity)> {
     if curr_iteration > max_iterations.0.into() {
-        return sort_map_vec(curr_handlers);
+        return get_final_vec(curr_handlers);
     }
     // i don't think someone will try to use a pointer over 10 kilometers
     if curr_distance > 10000.0 {
-        return sort_map_vec(curr_handlers);
+        return get_final_vec(curr_handlers);
     }
     let curr_point = ray.get_point(curr_distance);
     let mut step_size = None;
@@ -81,8 +90,22 @@ fn raymarch(
         if step_size.is_none() || step_size.is_some_and(|d| d > distance) {
             step_size = Some(distance);
         }
+
+        let smallest_distance = curr_handlers
+            .get(handler)
+            .map(|v| v.distance_to_closest_point)
+            .unwrap_or(f32::MAX);
+        if distance <= smallest_distance {
+            curr_handlers.insert(
+                *handler,
+                RaymarchData {
+                    distance_on_ray: curr_distance,
+                    distance_to_closest_point: distance,
+                    closest_point,
+                },
+            );
+        }
         if distance <= hit_distance.0 {
-            curr_handlers.push((distance, closest_point, *handler));
             hit_handlers.insert(*handler);
         }
     }
@@ -99,9 +122,22 @@ fn raymarch(
     )
 }
 
-fn sort_map_vec(mut vec: Vec<(f32, Vec3, Entity)>) -> Vec<(Vec3, Entity)> {
-    vec.sort_by(|(distance1, _, _), (distance2, _, _)| {
-        distance1.partial_cmp(distance2).unwrap_or(Ordering::Equal)
+fn get_final_vec(map: EntityHashMap<RaymarchData>) -> Vec<(Vec3, Entity)> {
+    let mut vec: Vec<_> = map.into_iter().collect();
+    vec.sort_by(|(_, data1), (_, data2)| {
+        match data1
+            .distance_on_ray
+            .partial_cmp(&data2.distance_on_ray)
+            .unwrap_or(Ordering::Equal)
+        {
+            Ordering::Equal => data1
+                .distance_to_closest_point
+                .partial_cmp(&data2.distance_to_closest_point)
+                .unwrap_or(Ordering::Equal),
+            a => a,
+        }
     });
-    vec.into_iter().map(|(_, p, e)| (p, e)).collect()
+    vec.into_iter()
+        .map(|(e, data)| (data.closest_point, e))
+        .collect()
 }
