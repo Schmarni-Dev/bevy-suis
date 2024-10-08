@@ -1,7 +1,7 @@
 use bevy::ecs::{
     entity::{EntityHashMap, EntityHashSet},
     query::QueryFilter,
-    system::{RunSystemOnce, System, SystemState},
+    system::{System, SystemState},
 };
 use bevy::prelude::*;
 use raymarching::{
@@ -39,16 +39,26 @@ pub struct InputMethodActive(pub bool);
 pub struct PointerInputMethod(pub Ray3d);
 
 fn clear_captures(
-    mut query: Query<&mut InputMethod>,
+    mut query: Query<(Entity, &mut InputMethod, Option<&mut LastCapturedBy>)>,
     mut handler_query: Query<&mut InputHandlerCaptures>,
+    mut cmds: Commands,
 ) {
-    for mut method in &mut query {
-        method.captured_by = None;
+    for (e, mut method, last) in &mut query {
+        let last_captured = method.captured_by.take();
+        match last {
+            Some(mut v) => v.0 = last_captured,
+            None => {
+                cmds.entity(e).insert(LastCapturedBy(last_captured));
+            }
+        }
     }
     for mut handler in &mut handler_query {
         handler.captured_methods.clear();
     }
 }
+
+#[derive(Component, Clone, Copy, Default)]
+struct LastCapturedBy(Option<Entity>);
 
 #[derive(SystemSet, Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub enum SuisPreUpdateSets {
@@ -130,7 +140,9 @@ fn run_capture_conditions(world: &mut World) {
     let mut insert_active = EntityHashSet::default();
     let (mut method_query, handler_query) = state.0.get_mut(world);
     let mut interactions: EntityHashMap<Vec<(Vec3, Entity)>> = default();
-    for (method_entity, method_location, active, ray_method) in method_query.iter_mut() {
+    for (method_entity, method_location, last_captured_by, active, ray_method) in
+        method_query.iter_mut()
+    {
         let method_position = method_location.translation();
         match active {
             Some(v) => {
@@ -142,7 +154,7 @@ fn run_capture_conditions(world: &mut World) {
                 insert_active.insert(method_entity);
             }
         }
-        let order = if let Some((ray, max_iters, min_step_size, hit_distance)) = ray_method {
+        let mut order = if let Some((ray, max_iters, min_step_size, hit_distance)) = ray_method {
             raymarch_fields(
                 &ray.0,
                 handler_query.iter().collect(),
@@ -166,6 +178,19 @@ fn run_capture_conditions(world: &mut World) {
             });
             o.into_iter().map(|(e, _, p)| (p, e)).collect()
         };
+        if let Some(last) = last_captured_by.0 {
+            if let Some(index) = order
+                .iter()
+                .enumerate()
+                .find(|(_, v)| v.1 == last)
+                .map(|(i, _)| i)
+            {
+                let data = order.remove(index);
+                order.insert(0, data);
+            } else {
+                order.insert(0, (method_position, last));
+            }
+        }
         interactions.insert(method_entity, order);
     }
     for e in insert_active.into_iter() {
@@ -356,6 +381,7 @@ struct RunCaptureConditionsState(
             (
                 Entity,
                 &'static GlobalTransform,
+                &'static LastCapturedBy,
                 Option<&'static InputMethodActive>,
                 Option<(
                     &'static PointerInputMethod,
