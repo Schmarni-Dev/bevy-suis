@@ -56,7 +56,7 @@ pub fn raymarch_fields(
 struct RaymarchData {
     distance_on_ray: f32,
     distance_to_closest_point: f32,
-    closest_point: Vec3,
+    point_on_ray: Vec3,
 }
 
 // this is probably very slow, but i don't care for now
@@ -101,7 +101,7 @@ fn raymarch(
                 RaymarchData {
                     distance_on_ray: curr_distance,
                     distance_to_closest_point: distance,
-                    closest_point,
+                    point_on_ray: curr_point,
                 },
             );
         }
@@ -138,6 +138,6 @@ fn get_final_vec(map: EntityHashMap<RaymarchData>) -> Vec<(Vec3, Entity)> {
         }
     });
     vec.into_iter()
-        .map(|(e, data)| (data.closest_point, e))
+        .map(|(e, data)| (data.point_on_ray, e))
         .collect()
 }
