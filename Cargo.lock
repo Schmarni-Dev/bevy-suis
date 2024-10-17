@@ -3262,7 +3262,7 @@ dependencies = [
 [[package]]
 name = "schminput"
 version = "0.1.0-rc1.1"
-source = "git+https://github.com/Schmarni-Dev/schminput#dba7c570ead02f2cfc59cc4aeefbb389e5db6950"
+source = "git+https://github.com/Schmarni-Dev/schminput#187dd59706a94b068122032d7e827fad8e4fd2bb"
 dependencies = [
  "bevy",
  "bevy_mod_openxr",

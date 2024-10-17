@@ -1,11 +1,10 @@
 use bevy::prelude::*;
-#[cfg(not(target_family = "wasm"))]
 use bevy_mod_xr::{
     hands::{LeftHand, RightHand},
     session::{XrPreDestroySession, XrSessionCreated, XrState, XrTrackingRoot},
 };
-#[cfg(not(target_family = "wasm"))]
-use schminput::openxr::{AttachSpaceToEntity, OxrInputPlugin};
+use schminput::openxr::OxrInputPlugin;
+use schminput::xr::AttachSpaceToEntity;
 use schminput::{prelude::*, SchminputPlugin, SchminputSet};
 
 use crate::InputMethodActive;
