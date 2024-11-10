@@ -1,9 +1,12 @@
-use bevy::ecs::{
-    entity::{EntityHashMap, EntityHashSet},
-    query::QueryFilter,
-    system::{System, SystemState},
-};
 use bevy::prelude::*;
+use bevy::{
+    ecs::{
+        entity::{EntityHashMap, EntityHashSet},
+        query::QueryFilter,
+        system::{System, SystemState},
+    },
+    math::vec3,
+};
 use raymarching::{
     raymarch_fields, RaymarchDefaultStepSize, RaymarchHitDistance, RaymarchMaxIterations,
 };
@@ -108,7 +111,7 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
             let closest_point = handler_transform
                 .compute_matrix()
                 .inverse()
-                .transform_point3(field.closest_point2(handler_transform, point));
+                .transform_point3(field.closest_point(handler_transform, point));
             methods.push(InnerInputHandlingContext {
                 input_method: method,
                 input_method_location: Transform::from_matrix(
@@ -166,7 +169,7 @@ fn run_capture_conditions(world: &mut World) {
             let mut o = handler_query
                 .iter()
                 .map(|(e, field, field_location)| {
-                    let point = field.closest_point2(field_location, method_position);
+                    let point = field.closest_point(field_location, method_position);
 
                     let distance = point.distance(method_position);
 
@@ -225,7 +228,8 @@ fn run_capture_conditions(world: &mut World) {
             let closest_point = handler_transform
                 .compute_matrix()
                 .inverse()
-                .transform_point3(handler_field.closest_point2(&handler_transform, point));
+                .transform_point3(handler_field.closest_point(&handler_transform, point));
+            let distance = handler_field.distance(&handler_transform, point);
             // send a precomputed distance?
             let point = handler_transform
                 .compute_matrix()
@@ -245,6 +249,7 @@ fn run_capture_conditions(world: &mut World) {
                     )
                     .with_translation(point),
                     closest_point,
+                    distance
                 },
                 world,
             );
@@ -313,8 +318,10 @@ pub struct CaptureContext {
     pub input_method: Entity,
     /// Location in handlers local space
     pub input_method_location: Transform,
-    /// Point in handlers local space
+    /// Closest Point the the surface of the field, Point is in handlers local space
     pub closest_point: Vec3,
+    /// Signed Distance between the input method and the surface of the field
+    pub distance: f32,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -323,51 +330,41 @@ pub enum Field {
     Cuboid(Cuboid),
 }
 impl Field {
-    pub fn closest_point(
-        &self,
-        this_transform: &Transform,
-        reference_space: &Transform,
-        point: Vec3,
-    ) -> Vec3 {
-        let reference_to_this_transform =
-            reference_space.compute_matrix().inverse() * this_transform.compute_matrix();
-        let local_point = reference_to_this_transform.transform_point3(point);
-
-        let local_closest_point = match self {
-            Field::Sphere(r) => local_point.normalize() * (local_point.length().min(*r)),
-            Field::Cuboid(cuboid) => cuboid.closest_point(local_point),
-        };
-
-        reference_to_this_transform
-            .inverse()
-            .transform_point3(local_closest_point)
+    pub fn closest_point(&self, field_transform: &GlobalTransform, point: Vec3) -> Vec3 {
+        point - self.normal(field_transform, point) * self.distance(field_transform, point)
     }
-    pub fn closest_point2(&self, field_transform: &GlobalTransform, point: Vec3) -> Vec3 {
+    /// point should be in world-space
+    pub fn normal(&self, field_transform: &GlobalTransform, point: Vec3) -> Vec3 {
+        let distance_vec = Vec3::splat(self.distance(field_transform, point));
+        const R: f32 = 0.0001;
+        const G: &'static GlobalTransform = &GlobalTransform::IDENTITY;
+        let r_vec = Vec3::new(
+            self.distance(field_transform, point + vec3(R, 0.0, 0.0)),
+            self.distance(field_transform, point + vec3(0.0, R, 0.0)),
+            self.distance(field_transform, point + vec3(0.0, 0.0, R)),
+        );
+        let local_normal = distance_vec - r_vec;
+        -field_transform
+            .affine()
+            .transform_vector3(local_normal)
+            .normalize()
+    }
+    /// point should be in world-space
+    pub fn distance(&self, field_transform: &GlobalTransform, point: Vec3) -> f32 {
         let world_to_local_matrix = field_transform.compute_matrix().inverse();
-        let local_point = world_to_local_matrix.transform_point3(point);
-
-        let local_closest_point = match self {
-            Field::Sphere(r) => local_point.normalize() * (local_point.length().min(*r)),
-            Field::Cuboid(cuboid) => cuboid.closest_point(local_point),
-        };
-
-        world_to_local_matrix
-            .inverse()
-            .transform_point3(local_closest_point)
-    }
-    pub fn distance2(&self, field_transform: &GlobalTransform, point: Vec3) -> f32 {
-        let closest_point = self.closest_point2(field_transform, point);
-        point.distance(closest_point)
-    }
-
-    pub fn distance(
-        &self,
-        this_transform: &Transform,
-        reference_space: &Transform,
-        point: Vec3,
-    ) -> f32 {
-        let closest_point = self.closest_point(this_transform, reference_space, point);
-        point.distance(closest_point)
+        let p = world_to_local_matrix.transform_point3(point);
+        match self {
+            Field::Sphere(radius) => p.length() - radius,
+            Field::Cuboid(cuboid) => {
+                let q = Vec3::new(
+                    p.x.abs() - cuboid.half_size.x,
+                    p.y.abs() - cuboid.half_size.y,
+                    p.z.abs() - cuboid.half_size.z,
+                );
+                let v = Vec3::new(q.x.max(0_f32), q.y.max(0_f32), q.z.max(0_f32));
+                v.length() + q.x.max(q.y.max(q.z)).min(0_f32)
+            }
+        }
     }
 }
 

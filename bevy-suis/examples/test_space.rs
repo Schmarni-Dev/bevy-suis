@@ -14,9 +14,9 @@ pub struct Pointer;
 
 fn setup(mut cmds: Commands) {
     cmds.spawn(Pointer).insert(SpatialBundle::default());
-    // cmds.spawn(Field::Sphere(0.5))
-    //     .insert(SpatialBundle::default())
-    //     .insert(Transform::from_xyz(0.0, -1.0, 0.0));
+    cmds.spawn(Field::Sphere(0.5))
+        .insert(SpatialBundle::default())
+        .insert(Transform::from_xyz(0.0, -1.0, -5.));
     cmds.spawn(Field::Cuboid(Cuboid::new(1., 2., 3.)))
         .insert(SpatialBundle::default())
         .insert(Transform::from_xyz(0.0, -1.0, 0.0));
@@ -55,9 +55,15 @@ fn draw_things(
     field_query: Query<(&GlobalTransform, &Field)>,
     pointer_query: Query<&GlobalTransform, With<Pointer>>,
 ) {
-    let field = field_query.single();
     let pointer = pointer_query.single();
-    let closest_point = field.1.closest_point2(field.0, pointer.translation());
+    for (f_pose, field) in &field_query {
+        let pos = f_pose.translation();
+        let closest_point = field.closest_point(f_pose, pointer.translation());
+        let normal = field.normal(f_pose, pointer.translation());
+        let distance = field.distance(f_pose, pointer.translation());
+        giz.line(pos, pos + normal, css::GOLD);
+        giz.line(pos, pos + (Vec3::Y * distance), css::RED);
+        giz.sphere(closest_point, Quat::IDENTITY, 0.01, css::MAGENTA);
+    }
     giz.axes(*pointer, 0.05);
-    giz.sphere(closest_point, Quat::IDENTITY, 0.01, css::MAGENTA);
 }

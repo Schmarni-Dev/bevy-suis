@@ -85,7 +85,7 @@ fn raymarch(
         if hit_handlers.contains(handler) {
             continue;
         }
-        let closest_point = field.closest_point2(field_transform, curr_point);
+        let closest_point = field.closest_point(field_transform, curr_point);
         let distance = closest_point.distance(curr_point);
         if step_size.is_none() || step_size.is_some_and(|d| d > distance) {
             step_size = Some(distance);
@@ -105,7 +105,7 @@ fn raymarch(
                 },
             );
         }
-        if distance <= hit_distance.0 {
+        if distance < 0.0 {
             hit_handlers.insert(*handler);
         }
     }

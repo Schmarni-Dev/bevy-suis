@@ -1,5 +1,5 @@
-use bevy::prelude::*;
-use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
+use bevy::{prelude::*, render::pipelined_rendering::PipelinedRenderingPlugin};
+use bevy_mod_openxr::{add_xr_plugins, init::OxrInitPlugin, session::OxrSession};
 use bevy_mod_xr::{
     camera::XrCamera,
     session::{session_running, XrSessionCreated},
@@ -16,7 +16,9 @@ use openxr::ReferenceSpaceType;
 // TODO: improve capturing mechanism
 fn main() -> AppExit {
     App::new()
-        .add_plugins(add_xr_plugins(DefaultPlugins))
+        .add_plugins(add_xr_plugins(
+            DefaultPlugins.build().disable::<PipelinedRenderingPlugin>(),
+        ))
         .add_plugins((
             SuisCorePlugin,
             SuisXrPlugin,
@@ -158,19 +160,16 @@ fn capture_condition(
     {
         return false;
     }
-    let method_distance = ctx
-        .closest_point
-        .distance(ctx.input_method_location.translation);
 
     // threshold needed to be this high else controllers wouldn't rellieably capture, idk why
-    let mut capture = method_distance <= 0.001;
+    let mut capture = ctx.distance < 0.0;
     let Ok((hand_data, is_pointer, mouse_data, controller_data)) = query.get(ctx.input_method)
     else {
         return capture;
     };
     if let Some(hand_data) = hand_data {
         let hand = hand_data.get_in_relative_space(&ctx.handler_location);
-        if method_distance < 0.1 {
+        if ctx.distance < 0.1 {
             capture |= finger_separation(&hand, GRAB_SEPARATION * 1.5);
         }
     }
