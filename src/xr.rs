@@ -3,10 +3,7 @@ use bevy::prelude::*;
 #[cfg(not(target_family = "wasm"))]
 use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
 #[cfg(not(target_family = "wasm"))]
-use bevy_mod_openxr::{
-    features::handtracking::{spawn_hand_bones, OxrHandTracker},
-    session::OxrSession,
-};
+use bevy_mod_openxr::{features::handtracking::OxrHandTracker, session::OxrSession};
 use bevy_mod_xr::{
     hands::{HandBone, HandBoneRadius, LeftHand, RightHand, XrHandBoneEntities, HAND_JOINT_COUNT},
     session::{XrPreDestroySession, XrSessionCreated, XrTrackingRoot},
@@ -162,6 +159,8 @@ fn spawn_input_hands(
     session: Res<OxrSession>,
     root: Query<Entity, With<XrTrackingRoot>>,
 ) {
+    use bevy_mod_xr::hands::spawn_hand_bones;
+
     let Ok(root) = root.get_single() else {
         error!("unable to get tracking root, skipping hand creation");
         return;
@@ -188,8 +187,9 @@ fn spawn_input_hands(
             return;
         }
     };
-    let left_bones = spawn_hand_bones(&mut cmds, (SuisInputXrHand, LeftHand, HandSide::Left));
-    let right_bones = spawn_hand_bones(&mut cmds, (SuisInputXrHand, RightHand, HandSide::Right));
+    let left_bones = spawn_hand_bones(&mut cmds, |_| (SuisInputXrHand, LeftHand, HandSide::Left));
+    let right_bones =
+        spawn_hand_bones(&mut cmds, |_| (SuisInputXrHand, RightHand, HandSide::Right));
     cmds.entity(root).push_children(&left_bones);
     cmds.entity(root).push_children(&right_bones);
     let left_tracker_entity = cmds
