@@ -1,23 +1,26 @@
-use std::mem;
+use std::{borrow::Cow, mem};
 
 use bevy::{prelude::*, utils::HashMap};
 use bevy_mod_openxr::{
+    action_binding::{OxrSendActionBindings, OxrSuggestActionBinding},
+    action_set_attaching::OxrAttachActionSet,
     action_set_syncing::{OxrActionSetSyncSet, OxrSyncActionSet},
-    init::create_xr_session,
+    resources::OxrInstance,
     session::OxrSession,
 };
 use bevy_mod_xr::{
-    session::{XrCreateSession, XrDestroySession},
+    session::{session_available, XrPreDestroySession, XrSessionCreated},
     spaces::XrSpace,
     types::XrPose,
 };
 use openxr::{ActionTy, Path, Vector2f};
 
-use self::binding::{SuisOxrBindingAction, SuisOxrBindings};
+use self::binding::{SuisOxrBindingAction, SuisOxrBindingSet, SuisOxrBindings};
 
-pub struct OpenXrLowLevelActionPlugin;
-impl Plugin for OpenXrLowLevelActionPlugin {
+pub struct SuisOxrActionPlugin;
+impl Plugin for SuisOxrActionPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<SuisOxrBindings>();
         app.add_systems(
             PreUpdate,
             (
@@ -26,33 +29,53 @@ impl Plugin for OpenXrLowLevelActionPlugin {
             )
                 .chain(),
         );
-        // There might be a ordering issue here too
-        app.add_systems(XrDestroySession, destroy_action_spaces);
+        app.add_systems(PostStartup, create_actions.run_if(session_available));
         // The .after should ideally not be needed, but it is for bevy_mod_openxr 0.1.0-rc1
-        app.add_systems(XrCreateSession, create_actions.after(create_xr_session));
+        app.add_systems(XrSessionCreated, attach_actions);
+        // There might be a ordering issue here too
+        app.add_systems(XrPreDestroySession, destroy_action_spaces);
+        app.add_systems(OxrSendActionBindings, suggest_bindings);
     }
 }
+fn attach_actions(sets: Query<&SuisOxrActionSet>, mut writer: EventWriter<OxrAttachActionSet>) {
+    writer.send_batch(sets.iter().map(|v| &v.set).cloned().map(OxrAttachActionSet));
+}
+
+fn suggest_bindings(
+    sets: Query<(&SuisOxrActionSet, &SuisOxrBindingSet)>,
+    mut writer: EventWriter<OxrSuggestActionBinding>,
+) {
+    for (set, bindings) in sets.iter() {
+        for (action, binding) in set.actions.iter().zip(bindings.actions.iter()) {
+            for (profile, bindings) in binding.bindings.iter() {
+                writer.send(OxrSuggestActionBinding {
+                    action: action.as_raw(),
+                    interaction_profile: Cow::Borrowed(*profile),
+                    bindings: bindings.iter().map(|v| Cow::Borrowed(*v)).collect(),
+                });
+            }
+        }
+    }
+}
+
 fn create_actions(
     mut cmds: Commands,
-    session: Res<OxrSession>,
+    instance: Res<OxrInstance>,
     mut bindings: ResMut<SuisOxrBindings>,
 ) {
     let mut sets = Vec::<Entity>::new();
     let bindings = mem::take(&mut *bindings);
     for set_bindings in bindings.sets {
-        let set = match session.instance().create_action_set(
-            set_bindings.name,
-            set_bindings.localized_name,
-            0,
-        ) {
-            Ok(v) => v,
-            Err(err) => {
-                warn!("error while creating action_set: {}", err);
-                continue;
-            }
-        };
+        let set =
+            match instance.create_action_set(set_bindings.name, set_bindings.localized_name, 0) {
+                Ok(v) => v,
+                Err(err) => {
+                    warn!("error while creating action_set: {}", err);
+                    continue;
+                }
+            };
         let mut actions = Vec::<SuisOxrAction>::new();
-        for action in set_bindings.actions {
+        for action in set_bindings.actions.iter() {
             // TODO: implement subaction paths
             let a = match create_suis_oxr_action(action, &set) {
                 Ok(a) => a,
@@ -71,6 +94,7 @@ fn create_actions(
                 set,
                 actions,
             })
+            .insert(set_bindings)
             .id(),
         );
     }
@@ -78,7 +102,7 @@ fn create_actions(
     cmds.remove_resource::<SuisOxrBindings>();
 }
 fn create_suis_oxr_action(
-    action: SuisOxrBindingAction,
+    action: &SuisOxrBindingAction,
     set: &openxr::ActionSet,
 ) -> openxr::Result<SuisOxrAction> {
     let a = match action.action_type {
@@ -141,7 +165,10 @@ fn sync_sets(sets: Query<&SuisOxrActionSet>, mut writer: EventWriter<OxrSyncActi
 }
 
 pub mod binding {
-    use bevy::{ecs::system::Resource, utils::HashMap};
+    use bevy::{
+        ecs::{component::Component, system::Resource},
+        utils::HashMap,
+    };
 
     #[derive(Clone)]
     pub enum SuisOxrActionType {
@@ -171,6 +198,7 @@ pub mod binding {
             }
         }
     }
+    #[derive(Component)]
     pub struct SuisOxrBindingSet {
         pub(super) name: &'static str,
         pub(super) localized_name: &'static str,
@@ -307,6 +335,16 @@ pub enum SuisOxrAction {
     Vec2(SuisOxrTypedAction<Vector2f>),
     Space(SuisOxrSpaceAction),
 }
+impl SuisOxrAction {
+    pub fn as_raw(&self) -> openxr::sys::Action {
+        match self {
+            SuisOxrAction::Bool(v) => v.action.as_raw(),
+            SuisOxrAction::F32(v) => v.action.as_raw(),
+            SuisOxrAction::Vec2(v) => v.action.as_raw(),
+            SuisOxrAction::Space(v) => v.action.as_raw(),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct SuisOxrTypedAction<T: ActionTy> {
@@ -330,7 +368,7 @@ impl SuisOxrSpaceAction {
     ) -> openxr::Result<XrSpace> {
         let space = session.create_action_space(&self.action, path, offset)?;
         let last_space = self.last_values.insert(path, space);
-        if last_space != Some(space) {
+        if last_space == Some(space) {
             let _ = session.destroy_space(last_space.expect("None =! Some(XrSpace)"));
         }
         Ok(space)
