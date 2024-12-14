@@ -1,5 +1,6 @@
 use crate::InputMethodActive;
 use bevy::prelude::*;
+use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
 use bevy_mod_xr::{
     hands::{HandBone, HandBoneRadius, LeftHand, RightHand, XrHandBoneEntities, HAND_JOINT_COUNT},
     session::{XrPreDestroySession, XrSessionCreated, XrTrackingRoot},
@@ -145,9 +146,24 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
         error!("unable to get tracking root, skipping hand creation");
         return;
     };
-    let left_bones = spawn_hand_bones(&mut cmds, |_| (SuisInputXrHand, LeftHand, HandSide::Left));
-    let right_bones =
-        spawn_hand_bones(&mut cmds, |_| (SuisInputXrHand, RightHand, HandSide::Right));
+    let left_bones = spawn_hand_bones(&mut cmds, |_| {
+        (
+            SuisInputXrHand,
+            LeftHand,
+            HandSide::Left,
+            XrSpaceLocationFlags::default(),
+            OxrSpaceLocationFlags(openxr::SpaceLocationFlags::EMPTY),
+        )
+    });
+    let right_bones = spawn_hand_bones(&mut cmds, |_| {
+        (
+            SuisInputXrHand,
+            RightHand,
+            HandSide::Right,
+            XrSpaceLocationFlags::default(),
+            OxrSpaceLocationFlags(openxr::SpaceLocationFlags::EMPTY),
+        )
+    });
     cmds.entity(root).push_children(&left_bones);
     cmds.entity(root).push_children(&right_bones);
     cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
@@ -156,9 +172,9 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
         side: HandSide::Left,
     });
     cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
-        joints: XrHandBoneEntities(left_bones),
+        joints: XrHandBoneEntities(right_bones),
         tracker_bundle: SuisInputXrHand,
-        side: HandSide::Left,
+        side: HandSide::Right,
     });
     cmds.spawn((
         SpatialBundle::default(),

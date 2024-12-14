@@ -11,9 +11,9 @@ schminput = { version = "0.1.0", features = ["xr"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 bevy_mod_openxr = "0.1.0"
+openxr = { version = "0.18.0", default-features = false }
 
 [dev-dependencies]
-openxr = { version = "0.18.0", default-features = false }
 
 [lints.clippy]
 too_many_arguments = "allow"
