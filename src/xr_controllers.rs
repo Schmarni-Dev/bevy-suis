@@ -2,24 +2,20 @@ use bevy::prelude::*;
 use bevy_mod_xr::{
     hands::{LeftHand, RightHand},
     session::{XrPreDestroySession, XrSessionCreated, XrState, XrTrackingRoot},
+    spaces::XrSpaceLocationFlags,
 };
 use schminput::openxr::OxrInputPlugin;
 use schminput::xr::AttachSpaceToEntity;
 use schminput::{prelude::*, SchminputPlugin, SchminputSet};
 
 use crate::InputMethodActive;
-#[cfg(not(target_family = "wasm"))]
-use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
 
 use crate::{xr::HandSide, InputMethod};
 
 pub struct SuisXrControllerPlugin;
 
 impl Plugin for SuisXrControllerPlugin {
-    #[cfg(not(target_family = "wasm"))]
     fn build(&self, app: &mut App) {
-        use bevy_mod_openxr::spaces::OxrSpaceSyncSet;
-
         if *app.world().resource::<XrState>() == XrState::Unavailable {
             return;
         }
@@ -31,29 +27,37 @@ impl Plugin for SuisXrControllerPlugin {
         app.add_systems(XrSessionCreated, spawn_input_methods);
         app.add_systems(XrPreDestroySession, despawn_input_methods);
         app.add_systems(Startup, setup);
-        app.add_systems(
-            PreUpdate,
-            (update_method_state, update_method_data)
-                .after(SchminputSet::SyncInputActions)
-                .after(OxrSpaceSyncSet)
-                .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
-        );
+        #[cfg(not(target_family = "wasm"))]
+        {
+            use bevy_mod_openxr::spaces::OxrSpaceSyncSet;
+            app.add_systems(
+                PreUpdate,
+                (update_method_state, update_method_data)
+                    .after(SchminputSet::SyncInputActions)
+                    .after(OxrSpaceSyncSet)
+                    .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
+            );
+        }
+        // Not Perfect since we don't schedule against SpaceSync, will be fixed in the next
+        // bevy_mod_xr version
+        #[cfg(target_family = "wasm")]
+        {
+            app.add_systems(
+                PreUpdate,
+                (update_method_state, update_method_data)
+                    .after(SchminputSet::SyncInputActions)
+                    .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
+            );
+        }
     }
-    #[cfg(target_family = "wasm")]
-    fn build(&self, app: &mut App) {}
 }
 
-#[cfg(not(target_family = "wasm"))]
-fn update_method_state(mut query: Query<(&mut InputMethodActive, &OxrSpaceLocationFlags)>) {
-    use openxr::SpaceLocationFlags;
-
+fn update_method_state(mut query: Query<(&mut InputMethodActive, &XrSpaceLocationFlags)>) {
     for (mut active, flags) in &mut query {
-        active.0 = flags.0.contains(SpaceLocationFlags::POSITION_TRACKED)
-            || flags.0.contains(SpaceLocationFlags::ORIENTATION_TRACKED);
+        active.0 = flags.position_tracked || flags.rotation_tracked;
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 fn update_method_data(
     bool_query: Query<&BoolActionValue>,
     vec2_query: Query<&Vec2ActionValue>,
@@ -94,7 +98,6 @@ fn update_method_data(
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 #[allow(dead_code)]
 #[derive(Clone, Copy, Resource)]
 struct Actions {
@@ -110,7 +113,6 @@ struct Actions {
     method_pose_right: Entity,
 }
 
-#[cfg(not(target_family = "wasm"))]
 fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
     let set = cmds
         .spawn(ActionSetBundle::new(
@@ -274,7 +276,6 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
     });
 }
 
-#[cfg(not(target_family = "wasm"))]
 fn despawn_input_methods(
     mut cmds: Commands,
     query: Query<Entity, With<XrControllerInputMethodData>>,
@@ -283,7 +284,6 @@ fn despawn_input_methods(
         cmds.entity(e).remove::<InputMethod>();
     }
 }
-#[cfg(not(target_family = "wasm"))]
 fn spawn_input_methods(
     mut cmds: Commands,
     query: Query<Entity, With<XrControllerInputMethodData>>,

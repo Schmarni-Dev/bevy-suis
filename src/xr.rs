@@ -1,19 +1,15 @@
 use crate::InputMethodActive;
 use bevy::prelude::*;
-#[cfg(not(target_family = "wasm"))]
-use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
-#[cfg(not(target_family = "wasm"))]
-use bevy_mod_openxr::{features::handtracking::OxrHandTracker, session::OxrSession};
 use bevy_mod_xr::{
     hands::{HandBone, HandBoneRadius, LeftHand, RightHand, XrHandBoneEntities, HAND_JOINT_COUNT},
     session::{XrPreDestroySession, XrSessionCreated, XrTrackingRoot},
+    spaces::XrSpaceLocationFlags,
 };
 
 use crate::{InputMethod, SuisPreUpdateSets};
 
 pub struct SuisXrPlugin;
 impl Plugin for SuisXrPlugin {
-    #[cfg(not(target_family = "wasm"))]
     fn build(&self, app: &mut App) {
         app.add_systems(XrSessionCreated, spawn_input_hands);
         app.add_systems(XrPreDestroySession, despawn_input_hands);
@@ -22,8 +18,6 @@ impl Plugin for SuisXrPlugin {
             update_hand_input_methods.in_set(SuisPreUpdateSets::UpdateInputMethods),
         );
     }
-    #[cfg(target_family = "wasm")]
-    fn build(&self, app: &mut App) {}
 }
 
 #[derive(Component, Clone, Copy)]
@@ -92,38 +86,30 @@ impl Default for HandInputMethodData {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 fn update_hand_input_methods(
     mut hand_method_query: Query<
         (
             &mut HandInputMethodData,
             &mut Transform,
-            &SuisXrHandTracker,
+            &SuisXrHandJoints,
             &mut InputMethodActive,
         ),
         With<InputMethod>,
     >,
-    flag_query: Query<&OxrSpaceLocationFlags>,
-    xr_hand_tracker_query: Query<&XrHandBoneEntities>,
+    flag_query: Query<&XrSpaceLocationFlags>,
     xr_hand_joint_query: Query<(&GlobalTransform, &HandBoneRadius)>,
 ) {
-    use openxr::SpaceLocationFlags;
-
-    for (mut hand_data, mut method_transform, tracker, mut active) in &mut hand_method_query {
-        let Ok(joint_entities) = xr_hand_tracker_query.get(tracker.0) else {
-            warn!("unable to get hand tracker entity");
-            continue;
-        };
+    for (mut hand_data, mut method_transform, joint_entities, mut active) in &mut hand_method_query
+    {
         let Ok(joints) = xr_hand_joint_query.get_many(joint_entities.0) else {
             warn!("unable to get hand joints");
             continue;
         };
         let flags = flag_query
-            .get(joint_entities[HandBone::IndexTip as usize])
-            .map(|v| v.0)
-            .unwrap_or(SpaceLocationFlags::EMPTY);
-        active.0 = flags.contains(SpaceLocationFlags::POSITION_TRACKED)
-            || flags.contains(SpaceLocationFlags::ORIENTATION_TRACKED);
+            .get(joint_entities.0[HandBone::IndexTip as usize])
+            .copied()
+            .unwrap_or_default();
+        active.0 = flags.position_tracked || flags.rotation_tracked;
 
         let hand = Hand::from_data(&joints);
         *method_transform = joints[HandBone::IndexTip as usize].0.compute_transform();
@@ -132,7 +118,7 @@ fn update_hand_input_methods(
 }
 
 #[derive(Clone, Copy, Component, Debug)]
-pub struct SuisXrHandTracker(pub Entity);
+pub struct SuisXrHandJoints(pub [Entity; HAND_JOINT_COUNT]);
 
 #[derive(Clone, Copy, Component, Debug)]
 pub enum HandSide {
@@ -142,7 +128,6 @@ pub enum HandSide {
 #[derive(Clone, Copy, Component, Debug)]
 pub struct SuisInputXrHand;
 
-#[cfg(not(target_family = "wasm"))]
 #[allow(clippy::type_complexity)]
 fn despawn_input_hands(
     mut cmds: Commands,
@@ -153,68 +138,33 @@ fn despawn_input_hands(
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
-fn spawn_input_hands(
-    mut cmds: Commands,
-    session: Res<OxrSession>,
-    root: Query<Entity, With<XrTrackingRoot>>,
-) {
-    use bevy_mod_xr::hands::spawn_hand_bones;
+fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
+    use bevy_mod_xr::hands::{spawn_hand_bones, HandSide};
 
     let Ok(root) = root.get_single() else {
         error!("unable to get tracking root, skipping hand creation");
         return;
-    };
-    let tracker_left = match session.create_hand_tracker(openxr::HandEXT::LEFT) {
-        Ok(t) => t,
-        Err(openxr::sys::Result::ERROR_EXTENSION_NOT_PRESENT) => {
-            warn!("Handtracking Extension not loaded, Unable to create Handtracker!");
-            return;
-        }
-        Err(err) => {
-            warn!("Error while creating Handtracker: {}", err.to_string());
-            return;
-        }
-    };
-    let tracker_right = match session.create_hand_tracker(openxr::HandEXT::RIGHT) {
-        Ok(t) => t,
-        Err(openxr::sys::Result::ERROR_EXTENSION_NOT_PRESENT) => {
-            warn!("Handtracking Extension not loaded, Unable to create Handtracker!");
-            return;
-        }
-        Err(err) => {
-            warn!("Error while creating Handtracker: {}", err.to_string());
-            return;
-        }
     };
     let left_bones = spawn_hand_bones(&mut cmds, |_| (SuisInputXrHand, LeftHand, HandSide::Left));
     let right_bones =
         spawn_hand_bones(&mut cmds, |_| (SuisInputXrHand, RightHand, HandSide::Right));
     cmds.entity(root).push_children(&left_bones);
     cmds.entity(root).push_children(&right_bones);
-    let left_tracker_entity = cmds
-        .spawn((
-            SuisInputXrHand,
-            OxrHandTracker(tracker_left),
-            XrHandBoneEntities(left_bones),
-            LeftHand,
-            HandSide::Left,
-        ))
-        .id();
-    let right_tracker_entity = cmds
-        .spawn((
-            SuisInputXrHand,
-            OxrHandTracker(tracker_right),
-            XrHandBoneEntities(right_bones),
-            RightHand,
-            HandSide::Right,
-        ))
-        .id();
+    cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
+        joints: XrHandBoneEntities(left_bones),
+        tracker_bundle: SuisInputXrHand,
+        side: HandSide::Left,
+    });
+    cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
+        joints: XrHandBoneEntities(left_bones),
+        tracker_bundle: SuisInputXrHand,
+        side: HandSide::Left,
+    });
     cmds.spawn((
         SpatialBundle::default(),
         InputMethod::new(),
         HandInputMethodData(Hand::empty()),
-        SuisXrHandTracker(left_tracker_entity),
+        SuisXrHandJoints(left_bones),
         LeftHand,
         HandSide::Left,
     ));
@@ -222,7 +172,7 @@ fn spawn_input_hands(
         SpatialBundle::default(),
         InputMethod::new(),
         HandInputMethodData(Hand::empty()),
-        SuisXrHandTracker(right_tracker_entity),
+        SuisXrHandJoints(right_bones),
         RightHand,
         HandSide::Right,
     ));
