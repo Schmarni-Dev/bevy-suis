@@ -28,10 +28,13 @@ fn draw_method_gizmos(
         if let Some(ray) = pointer {
             gizmos.line(ray.0.origin, ray.0.origin + (*ray.0.direction * 0.2), color);
         } else {
-            gizmos.cuboid(
-                transform.compute_transform().with_scale(Vec3::splat(0.05)),
-                color,
-            );
+            let t = transform.compute_transform();
+            let base = t.with_translation(transform.transform_point(Vec3::Z * 0.02));
+            gizmos.circle(base.translation, t.forward(), 0.01, color);
+            gizmos.line(base.transform_point(Vec3::X * 0.01), t.translation, color);
+            gizmos.line(base.transform_point(Vec3::X * -0.01), t.translation, color);
+            gizmos.line(base.transform_point(Vec3::Y * 0.01), t.translation, color);
+            gizmos.line(base.transform_point(Vec3::Y * -0.01), t.translation, color);
         }
     }
 }
