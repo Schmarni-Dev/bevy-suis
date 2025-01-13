@@ -1,15 +1,13 @@
 use bevy::prelude::*;
 use bevy::{
     ecs::{
-        entity::{EntityHashMap, EntityHashSet},
+        entity::EntityHashSet,
         query::QueryFilter,
         system::{System, SystemState},
     },
     math::vec3,
 };
-use raymarching::{
-    raymarch_fields, RaymarchDefaultStepSize, RaymarchHitDistance, RaymarchMaxIterations,
-};
+use raymarching::{raymarch_fields, RaymarchDefaultStepSize, RaymarchMaxIterations};
 use std::{cmp::Ordering, hash::Hash};
 pub mod debug;
 pub mod raymarching;
@@ -77,7 +75,6 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
             &PointerInputMethod,
             Option<&RaymarchMaxIterations>,
             Option<&RaymarchDefaultStepSize>,
-            Option<&RaymarchHitDistance>,
         )>,
     )>,
 ) -> Vec<InputHandlingContext> {
@@ -91,12 +88,11 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
         {
             let point = match pointer_method {
                 None => method_location.translation(),
-                Some((ray, max_iters, min_step_size, hit_distance)) => raymarch_fields(
+                Some((ray, max_iters, hit_distance)) => raymarch_fields(
                     &ray.0,
                     vec![(handler, field, handler_transform)],
                     max_iters.unwrap_or(&Default::default()),
                     hit_distance.unwrap_or(&Default::default()),
-                    min_step_size.unwrap_or(&Default::default()),
                 )
                 .iter()
                 .find(|(_, e)| *e == handler)
@@ -157,13 +153,12 @@ fn run_capture_conditions(world: &mut World) {
                 insert_active.insert(method_entity);
             }
         }
-        let order = if let Some((ray, max_iters, min_step_size, hit_distance)) = ray_method {
+        let order = if let Some((ray, max_iters, hit_distance)) = ray_method {
             raymarch_fields(
                 &ray.0,
                 handler_query.iter().collect(),
                 max_iters.unwrap_or(&Default::default()),
                 hit_distance.unwrap_or(&Default::default()),
-                min_step_size.unwrap_or(&Default::default()),
             )
         } else {
             let mut o = handler_query
@@ -339,7 +334,6 @@ impl Field {
     pub fn normal(&self, field_transform: &GlobalTransform, point: Vec3) -> Vec3 {
         let distance_vec = Vec3::splat(self.distance(field_transform, point));
         const R: f32 = 0.0001;
-        const G: &'static GlobalTransform = &GlobalTransform::IDENTITY;
         let r_vec = Vec3::new(
             self.distance(field_transform, point + vec3(R, 0.0, 0.0)),
             self.distance(field_transform, point + vec3(0.0, R, 0.0)),
@@ -386,7 +380,6 @@ struct RunCaptureConditionsState(
                     &'static PointerInputMethod,
                     Option<&'static RaymarchMaxIterations>,
                     Option<&'static RaymarchDefaultStepSize>,
-                    Option<&'static RaymarchHitDistance>,
                 )>,
             ),
         >,

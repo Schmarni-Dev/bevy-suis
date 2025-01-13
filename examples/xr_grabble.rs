@@ -68,7 +68,7 @@ fn move_grabble(
     parent_query: Query<&GlobalTransform>,
     mut cmds: Commands,
 ) {
-    for (handler_entity, handler, handler_gt, mut handler_transform, mut grabbed, parent) in
+    for (handler_entity, handler, handler_gt, mut handler_transform, grabbed, parent) in
         &mut grabbles
     {
         let Some((method_transform, hand_data, controller_data, mouse_data)) = handler

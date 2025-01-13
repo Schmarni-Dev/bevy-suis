@@ -24,27 +24,17 @@ impl Default for RaymarchDefaultStepSize {
     }
 }
 
-#[derive(Clone, Copy, Component, Debug, Deref)]
-pub struct RaymarchHitDistance(pub f32);
-impl Default for RaymarchHitDistance {
-    fn default() -> Self {
-        Self(f32::EPSILON * 4.0)
-    }
-}
-
 // Returns Entities sorted by distance from ray origin
 pub fn raymarch_fields(
     ray: &Ray3d,
     fields: Vec<(Entity, &Field, &GlobalTransform)>,
     max_iterations: &RaymarchMaxIterations,
-    hit_distance: &RaymarchHitDistance,
     default_step_size: &RaymarchDefaultStepSize,
 ) -> Vec<(Vec3, Entity)> {
     raymarch(
         ray,
         fields,
         max_iterations,
-        hit_distance,
         default_step_size,
         0,
         0.0,
@@ -65,7 +55,6 @@ fn raymarch(
     ray: &Ray3d,
     fields: Vec<(Entity, &Field, &GlobalTransform)>,
     max_iterations: &RaymarchMaxIterations,
-    hit_distance: &RaymarchHitDistance,
     min_step_size: &RaymarchDefaultStepSize,
     curr_iteration: u32,
     curr_distance: f32,
@@ -113,7 +102,6 @@ fn raymarch(
         ray,
         fields,
         max_iterations,
-        hit_distance,
         min_step_size,
         curr_iteration + 1,
         curr_distance + step_size.unwrap_or(min_step_size.0),
