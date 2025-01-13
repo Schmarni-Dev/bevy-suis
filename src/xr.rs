@@ -1,4 +1,7 @@
-use crate::InputMethodActive;
+use crate::{
+    semantic_input::{LightGrab, PrimaryInteract, StrongGrab},
+    InputMethodActive,
+};
 use bevy::prelude::*;
 use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
 use bevy_mod_xr::{
@@ -19,6 +22,118 @@ impl Plugin for SuisXrPlugin {
             update_hand_input_methods.in_set(SuisPreUpdateSets::UpdateInputMethods),
         );
     }
+}
+fn update_hand_input_methods(
+    mut hand_method_query: Query<
+        (
+            &mut HandInputMethodData,
+            &mut Transform,
+            &SuisXrHandJoints,
+            &mut InputMethodActive,
+            &mut StrongGrab,
+            &mut LightGrab,
+            &mut PrimaryInteract,
+        ),
+        With<InputMethod>,
+    >,
+    flag_query: Query<&XrSpaceLocationFlags>,
+    xr_hand_joint_query: Query<(&GlobalTransform, &HandBoneRadius)>,
+) {
+    for (
+        mut hand_data,
+        mut method_transform,
+        joint_entities,
+        mut active,
+        mut strong_gram,
+        mut light_grab,
+        mut primary_interact,
+    ) in &mut hand_method_query
+    {
+        let Ok(joints) = xr_hand_joint_query.get_many(joint_entities.0) else {
+            warn!("unable to get hand joints");
+            continue;
+        };
+        let flags = flag_query
+            .get(joint_entities.0[HandBone::IndexTip as usize])
+            .copied()
+            .unwrap_or_default();
+        active.0 = flags.position_tracked || flags.rotation_tracked;
+        let alt_joints = joints.map(|(t, r)| (t.compute_transform(), r));
+        let pinch = pinch_activation(&alt_joints);
+        let grab = grab_activation(&alt_joints);
+        strong_gram.0 = grab;
+        light_grab.0 = pinch;
+        primary_interact.0 = pinch;
+
+        let hand = Hand::from_data(&joints);
+        *method_transform = joints[HandBone::IndexTip as usize].0.compute_transform();
+        hand_data.set_in_global_space(hand);
+    }
+}
+
+#[allow(clippy::type_complexity)]
+fn despawn_input_hands(
+    mut cmds: Commands,
+    query: Query<Entity, Or<(With<SuisInputXrHand>, With<HandInputMethodData>)>>,
+) {
+    for e in &query {
+        cmds.entity(e).despawn();
+    }
+}
+
+fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
+    use bevy_mod_xr::hands::{spawn_hand_bones, HandSide};
+
+    let Ok(root) = root.get_single() else {
+        error!("unable to get tracking root, skipping hand creation");
+        return;
+    };
+    let left_bones = spawn_hand_bones(&mut cmds, |_| {
+        (
+            SuisInputXrHand,
+            LeftHand,
+            HandSide::Left,
+            XrSpaceLocationFlags::default(),
+            OxrSpaceLocationFlags(openxr::SpaceLocationFlags::EMPTY),
+        )
+    });
+    let right_bones = spawn_hand_bones(&mut cmds, |_| {
+        (
+            SuisInputXrHand,
+            RightHand,
+            HandSide::Right,
+            XrSpaceLocationFlags::default(),
+            OxrSpaceLocationFlags(openxr::SpaceLocationFlags::EMPTY),
+        )
+    });
+    cmds.entity(root).push_children(&left_bones);
+    cmds.entity(root).push_children(&right_bones);
+    cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
+        joints: XrHandBoneEntities(left_bones),
+        tracker_bundle: SuisInputXrHand,
+        side: HandSide::Left,
+    });
+    cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
+        joints: XrHandBoneEntities(right_bones),
+        tracker_bundle: SuisInputXrHand,
+        side: HandSide::Right,
+    });
+    cmds.spawn((
+        SpatialBundle::default(),
+        InputMethod::new(),
+        HandInputMethodData(Hand::empty()),
+        SuisXrHandJoints(left_bones),
+        LeftHand,
+        HandSide::Left,
+    ));
+    cmds.spawn((
+        SpatialBundle::default(),
+        InputMethod::new(),
+        HandInputMethodData(Hand::empty()),
+        SuisXrHandJoints(right_bones),
+        RightHand,
+        HandSide::Right,
+    ));
 }
 
 #[derive(Component, Clone, Copy)]
@@ -87,37 +202,6 @@ impl Default for HandInputMethodData {
     }
 }
 
-fn update_hand_input_methods(
-    mut hand_method_query: Query<
-        (
-            &mut HandInputMethodData,
-            &mut Transform,
-            &SuisXrHandJoints,
-            &mut InputMethodActive,
-        ),
-        With<InputMethod>,
-    >,
-    flag_query: Query<&XrSpaceLocationFlags>,
-    xr_hand_joint_query: Query<(&GlobalTransform, &HandBoneRadius)>,
-) {
-    for (mut hand_data, mut method_transform, joint_entities, mut active) in &mut hand_method_query
-    {
-        let Ok(joints) = xr_hand_joint_query.get_many(joint_entities.0) else {
-            warn!("unable to get hand joints");
-            continue;
-        };
-        let flags = flag_query
-            .get(joint_entities.0[HandBone::IndexTip as usize])
-            .copied()
-            .unwrap_or_default();
-        active.0 = flags.position_tracked || flags.rotation_tracked;
-
-        let hand = Hand::from_data(&joints);
-        *method_transform = joints[HandBone::IndexTip as usize].0.compute_transform();
-        hand_data.set_in_global_space(hand);
-    }
-}
-
 #[derive(Clone, Copy, Component, Debug)]
 pub struct SuisXrHandJoints(pub [Entity; HAND_JOINT_COUNT]);
 
@@ -129,69 +213,36 @@ pub enum HandSide {
 #[derive(Clone, Copy, Component, Debug)]
 pub struct SuisInputXrHand;
 
-#[allow(clippy::type_complexity)]
-fn despawn_input_hands(
-    mut cmds: Commands,
-    query: Query<Entity, Or<(With<SuisInputXrHand>, With<HandInputMethodData>)>>,
-) {
-    for e in &query {
-        cmds.entity(e).despawn();
-    }
+const PINCH_MAX: f32 = 0.11;
+const PINCH_ACTIVACTION_DISTANCE: f32 = 0.01;
+fn pinch_activation(
+    joints: &[(Transform, &HandBoneRadius); bevy_mod_xr::hands::HAND_JOINT_COUNT],
+) -> f32 {
+    let combined_radius =
+        joints[HandBone::ThumbTip as usize].1 .0 + joints[HandBone::IndexTip as usize].1 .0;
+    let pinch_dist = joints[HandBone::ThumbTip as usize]
+        .0
+        .translation
+        .distance(joints[HandBone::IndexTip as usize].0.translation)
+        - combined_radius;
+    (1.0 - ((pinch_dist - PINCH_ACTIVACTION_DISTANCE) / (PINCH_MAX - PINCH_ACTIVACTION_DISTANCE)))
+        .clamp(0.0, 1.0)
 }
 
-fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
-    use bevy_mod_xr::hands::{spawn_hand_bones, HandSide};
-
-    let Ok(root) = root.get_single() else {
-        error!("unable to get tracking root, skipping hand creation");
-        return;
-    };
-    let left_bones = spawn_hand_bones(&mut cmds, |_| {
-        (
-            SuisInputXrHand,
-            LeftHand,
-            HandSide::Left,
-            XrSpaceLocationFlags::default(),
-            OxrSpaceLocationFlags(openxr::SpaceLocationFlags::EMPTY),
-        )
-    });
-    let right_bones = spawn_hand_bones(&mut cmds, |_| {
-        (
-            SuisInputXrHand,
-            RightHand,
-            HandSide::Right,
-            XrSpaceLocationFlags::default(),
-            OxrSpaceLocationFlags(openxr::SpaceLocationFlags::EMPTY),
-        )
-    });
-    cmds.entity(root).push_children(&left_bones);
-    cmds.entity(root).push_children(&right_bones);
-    cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
-        joints: XrHandBoneEntities(left_bones),
-        tracker_bundle: SuisInputXrHand,
-        side: HandSide::Left,
-    });
-    cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
-        joints: XrHandBoneEntities(right_bones),
-        tracker_bundle: SuisInputXrHand,
-        side: HandSide::Right,
-    });
-    cmds.spawn((
-        SpatialBundle::default(),
-        InputMethod::new(),
-        HandInputMethodData(Hand::empty()),
-        SuisXrHandJoints(left_bones),
-        LeftHand,
-        HandSide::Left,
-    ));
-    cmds.spawn((
-        SpatialBundle::default(),
-        InputMethod::new(),
-        HandInputMethodData(Hand::empty()),
-        SuisXrHandJoints(right_bones),
-        RightHand,
-        HandSide::Right,
-    ));
+const GRIP_MAX: f32 = 0.11;
+const GRIP_ACTIVACTION_DISTANCE: f32 = 0.01;
+fn grab_activation(
+    joints: &[(Transform, &HandBoneRadius); bevy_mod_xr::hands::HAND_JOINT_COUNT],
+) -> f32 {
+    let combined_radius =
+        joints[HandBone::RingTip as usize].1 .0 + joints[HandBone::RingMetacarpal as usize].1 .0;
+    let grip_dist = joints[HandBone::RingTip as usize]
+        .0
+        .translation
+        .distance(joints[HandBone::RingMetacarpal as usize].0.translation)
+        - combined_radius;
+    (1.0 - ((grip_dist - GRIP_ACTIVACTION_DISTANCE) / (GRIP_MAX - GRIP_ACTIVACTION_DISTANCE)))
+        .clamp(0.0, 1.0)
 }
 
 #[derive(Clone, Copy, Debug)]
