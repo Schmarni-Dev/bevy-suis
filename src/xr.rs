@@ -125,6 +125,9 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
         SuisXrHandJoints(left_bones),
         LeftHand,
         HandSide::Left,
+        StrongGrab::default(),
+        LightGrab::default(),
+        PrimaryInteract::default(),
     ));
     cmds.spawn((
         SpatialBundle::default(),
@@ -133,6 +136,9 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
         SuisXrHandJoints(right_bones),
         RightHand,
         HandSide::Right,
+        StrongGrab::default(),
+        LightGrab::default(),
+        PrimaryInteract::default(),
     ));
 }
 
