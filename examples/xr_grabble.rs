@@ -140,7 +140,16 @@ fn setup(mut cmds: Commands) {
         SpatialBundle::from_transform(Transform::from_xyz(0.0, 0.5, -0.5)),
         Grabble,
     ));
-    cmds.spawn((Camera3dBundle::default(), Cam));
+    cmds.spawn((
+        Camera3dBundle {
+            projection: Projection::Perspective(PerspectiveProjection {
+                fov: 110f32.to_radians(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        Cam,
+    ));
 }
 
 fn capture_condition(
