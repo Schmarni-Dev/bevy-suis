@@ -142,7 +142,7 @@ fn run_capture_conditions(world: &mut World) {
         .unwrap_or_else(|| RunCaptureConditionsState(SystemState::new(world)));
     let mut insert_active = EntityHashSet::default();
     let (mut method_query, handler_query) = state.0.get_mut(world);
-    let mut interactions: EntityHashMap<Vec<(Vec3, Entity)>> = default();
+    let mut interactions: Vec<(Entity, Vec3, Entity)> = default();
     for (method_entity, method_location, last_captured_by, active, ray_method) in
         method_query.iter_mut()
     {
@@ -157,7 +157,7 @@ fn run_capture_conditions(world: &mut World) {
                 insert_active.insert(method_entity);
             }
         }
-        let mut order = if let Some((ray, max_iters, min_step_size, hit_distance)) = ray_method {
+        let order = if let Some((ray, max_iters, min_step_size, hit_distance)) = ray_method {
             raymarch_fields(
                 &ray.0,
                 handler_query.iter().collect(),
@@ -181,25 +181,29 @@ fn run_capture_conditions(world: &mut World) {
             });
             o.into_iter().map(|(e, _, p)| (p, e)).collect()
         };
+        interactions.extend(
+            order
+                .into_iter()
+                .map(|(closest_point, handler)| (method_entity, closest_point, handler)),
+        );
         if let Some(last) = last_captured_by.0 {
-            if let Some(index) = order
+            if let Some(index) = interactions
                 .iter()
                 .enumerate()
-                .find(|(_, v)| v.1 == last)
+                .find(|(_, (method, _, handler))| *handler == last && *method == method_entity)
                 .map(|(i, _)| i)
             {
-                let data = order.remove(index);
-                order.insert(0, data);
+                let data = interactions.remove(index);
+                interactions.insert(0, data);
             } else {
-                order.insert(0, (method_position, last));
+                interactions.insert(0, (method_entity, method_position, last));
             }
         }
-        interactions.insert(method_entity, order);
     }
     for e in insert_active.into_iter() {
         world.entity_mut(e).insert(InputMethodActive(true));
     }
-    for (method_entity, order) in interactions.into_iter() {
+    for (method_entity, point, handler_entity) in interactions.into_iter() {
         fn x(world: &mut World, entity: Entity) -> Option<(Entity, InputMethod, GlobalTransform)> {
             let mut e = world.get_entity_mut(entity)?;
             Some((entity, e.take()?, e.get().copied()?))
@@ -207,65 +211,63 @@ fn run_capture_conditions(world: &mut World) {
         let Some((method_entity, mut method, method_location)) = x(world, method_entity) else {
             continue;
         };
-        for (point, handler_entity) in order.into_iter() {
-            fn x(
-                world: &mut World,
-                entity: Entity,
-            ) -> Option<(Entity, Field, GlobalTransform, InputHandler)> {
-                let mut e = world.get_entity_mut(entity)?;
-                Some((
-                    entity,
-                    e.get::<Field>().copied()?,
-                    e.get::<GlobalTransform>().copied()?,
-                    e.take::<InputHandler>()?,
-                ))
-            }
-            let Some((handler_entity, handler_field, handler_transform, mut handler)) =
-                x(world, handler_entity)
-            else {
-                continue;
-            };
-            let closest_point = handler_transform
-                .compute_matrix()
-                .inverse()
-                .transform_point3(handler_field.closest_point(&handler_transform, point));
-            let distance = handler_field.distance(&handler_transform, point);
-            // send a precomputed distance?
-            let point = handler_transform
-                .compute_matrix()
-                .inverse()
-                .transform_point3(point);
-            handler.capture_condition.initialize(world);
-            let wants_to_capture = handler.capture_condition.run(
-                CaptureContext {
-                    handler: handler_entity,
-                    handler_location: handler_transform,
-                    input_method: method_entity,
-                    input_method_location: Transform::from_matrix(
-                        handler_transform
-                            .compute_matrix()
-                            .inverse()
-                            .mul_mat4(&method_location.compute_matrix()),
-                    )
-                    .with_translation(point),
-                    closest_point,
-                    distance
-                },
-                world,
-            );
-            let mut e = world.entity_mut(handler_entity);
-            let mut captures = e.take::<InputHandlerCaptures>().unwrap_or_default();
-            if wants_to_capture {
-                method.captured_by = Some(handler_entity);
-                captures.captured_methods.push(method_entity);
-            }
-            e.insert(captures);
-            e.insert(handler);
-            if wants_to_capture {
-                break;
-            }
+        fn get(
+            world: &mut World,
+            entity: Entity,
+        ) -> Option<(Entity, Field, GlobalTransform, InputHandler)> {
+            let mut e = world.get_entity_mut(entity)?;
+            Some((
+                entity,
+                e.get::<Field>().copied()?,
+                e.get::<GlobalTransform>().copied()?,
+                e.take::<InputHandler>()?,
+            ))
         }
+        let Some((handler_entity, handler_field, handler_transform, mut handler)) =
+            get(world, handler_entity)
+        else {
+            continue;
+        };
+        let closest_point = handler_transform
+            .compute_matrix()
+            .inverse()
+            .transform_point3(handler_field.closest_point(&handler_transform, point));
+        let distance = handler_field.distance(&handler_transform, point);
+        // send a precomputed distance?
+        let point = handler_transform
+            .compute_matrix()
+            .inverse()
+            .transform_point3(point);
+        handler.capture_condition.initialize(world);
+        let wants_to_capture = handler.capture_condition.run(
+            CaptureContext {
+                handler: handler_entity,
+                handler_location: handler_transform,
+                input_method: method_entity,
+                input_method_location: Transform::from_matrix(
+                    handler_transform
+                        .compute_matrix()
+                        .inverse()
+                        .mul_mat4(&method_location.compute_matrix()),
+                )
+                .with_translation(point),
+                closest_point,
+                distance,
+            },
+            world,
+        );
+        let mut e = world.entity_mut(handler_entity);
+        let mut captures = e.take::<InputHandlerCaptures>().unwrap_or_default();
+        if wants_to_capture {
+            method.captured_by = Some(handler_entity);
+            captures.captured_methods.push(method_entity);
+        }
+        e.insert(captures);
+        e.insert(handler);
         world.entity_mut(method_entity).insert(method);
+        if wants_to_capture {
+            break;
+        }
     }
     world.insert_resource(state);
 }

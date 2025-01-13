@@ -311,6 +311,7 @@ dependencies = [
  "bevy",
  "bevy_mod_openxr",
  "bevy_mod_xr",
+ "bevy_xr_utils",
  "openxr",
  "schminput",
 ]
@@ -1151,6 +1152,18 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "winit",
+]
+
+[[package]]
+name = "bevy_xr_utils"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc7cce5a150619b58fb0a4f454252023493e5444c189efa1690333b0b39eede5"
+dependencies = [
+ "bevy",
+ "bevy_mod_openxr",
+ "bevy_mod_xr",
+ "openxr",
 ]
 
 [[package]]

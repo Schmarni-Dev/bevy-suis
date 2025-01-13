@@ -1,5 +1,5 @@
 use bevy::{prelude::*, render::pipelined_rendering::PipelinedRenderingPlugin};
-use bevy_mod_openxr::{add_xr_plugins, init::OxrInitPlugin, session::OxrSession};
+use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
 use bevy_mod_xr::{
     camera::XrCamera,
     session::{session_running, XrSessionCreated},
@@ -11,6 +11,7 @@ use bevy_suis::{
     xr_controllers::{SuisXrControllerPlugin, XrControllerInputMethodData},
     CaptureContext, Field, InputHandler, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
 };
+use bevy_xr_utils::hand_gizmos::HandGizmosPlugin;
 use openxr::ReferenceSpaceType;
 
 // TODO: improve capturing mechanism
@@ -25,6 +26,7 @@ fn main() -> AppExit {
             SuisDebugGizmosPlugin,
             SuisXrControllerPlugin,
             SuisWindowPointerPlugin,
+            HandGizmosPlugin,
         ))
         .add_systems(Startup, setup)
         .add_systems(XrSessionCreated, make_spectator_cam_follow)

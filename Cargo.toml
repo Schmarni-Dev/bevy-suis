@@ -14,6 +14,7 @@ bevy_mod_openxr = "0.1.0"
 openxr = { version = "0.18.0", default-features = false }
 
 [dev-dependencies]
+bevy_xr_utils = "0.1.0"
 
 [lints.clippy]
 too_many_arguments = "allow"
