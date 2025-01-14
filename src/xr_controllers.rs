@@ -8,7 +8,10 @@ use schminput::openxr::OxrInputPlugin;
 use schminput::xr::AttachSpaceToEntity;
 use schminput::{prelude::*, SchminputPlugin, SchminputSet};
 
-use crate::InputMethodActive;
+use crate::{
+    semantic_input::{LightGrab, PrimaryInteract, Scroll, SecondaryInteract, StrongGrab},
+    InputMethodActive,
+};
 
 use crate::{xr::HandSide, InputMethod};
 
@@ -59,58 +62,77 @@ fn update_method_state(mut query: Query<(&mut InputMethodActive, &XrSpaceLocatio
 }
 
 fn update_method_data(
-    bool_query: Query<&BoolActionValue>,
     vec2_query: Query<&Vec2ActionValue>,
-    mut method_query: Query<(&mut XrControllerInputMethodData, &HandSide), With<InputMethod>>,
-    actions: Res<Actions>,
+    f32_query: Query<&F32ActionValue>,
+    mut method_query: Query<
+        (
+            &ControllerActions,
+            &mut XrControllerInputMethodData,
+            &mut StrongGrab,
+            &mut LightGrab,
+            &mut PrimaryInteract,
+            &mut SecondaryInteract,
+            &mut Scroll,
+        ),
+        With<InputMethod>,
+    >,
 ) {
-    let trigger_pulled_left = bool_query
-        .get(actions.trigger_pulled_left)
-        .expect("not a bool action?");
-    let trigger_pulled_right = bool_query
-        .get(actions.trigger_pulled_right)
-        .expect("not a bool action?");
-    let squeezed_left = bool_query
-        .get(actions.squeezed_left)
-        .expect("not a bool action?");
-    let squeezed_right = bool_query
-        .get(actions.squeezed_right)
-        .expect("not a bool action?");
-    let stick_pos_left = vec2_query
-        .get(actions.stick_pos_left)
-        .expect("not a Vec2 action?");
-    let stick_pos_right = vec2_query
-        .get(actions.stick_pos_right)
-        .expect("not a Vec2 action?");
-    for (mut data, side) in &mut method_query {
-        match side {
-            HandSide::Left => {
-                data.trigger_pulled = trigger_pulled_left.any;
-                data.squeezed = squeezed_left.any;
-                data.stick_pos = stick_pos_left.any;
-            }
-            HandSide::Right => {
-                data.trigger_pulled = trigger_pulled_right.any;
-                data.squeezed = squeezed_right.any;
-                data.stick_pos = stick_pos_right.any;
-            }
-        }
+    for (
+        actions,
+        mut data,
+        mut strong_grab,
+        mut light_grab,
+        mut primary_interact,
+        mut secondary_interact,
+        mut scroll,
+    ) in &mut method_query
+    {
+        let trigger_pulled = f32_query
+            .get(actions.trigger_pulled)
+            .expect("not an f32 action?");
+        let squeezed = f32_query.get(actions.squeezed).expect("not an f32 action?");
+        let stick_pos = vec2_query
+            .get(actions.stick_pos)
+            .expect("not a Vec2 action?");
+        let secondary_interact_data = f32_query
+            .get(actions.secondary_interact)
+            .expect("not an f32 action?");
+        data.trigger_pulled = trigger_pulled.any;
+        data.squeezed = squeezed.any;
+        data.stick_pos = stick_pos.any;
+        strong_grab.0 = squeezed.any;
+        light_grab.0 = squeezed.any;
+        primary_interact.0 = trigger_pulled.any;
+        secondary_interact.0 = secondary_interact_data.any;
+        scroll.0 = stick_pos.any;
     }
 }
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Resource)]
-struct Actions {
-    set: Entity,
+pub struct Actions {
+    pub set: Entity,
     // this could be reduced with subaction paths, that would need another plugin from schminput
-    trigger_pulled_left: Entity,
-    trigger_pulled_right: Entity,
-    squeezed_left: Entity,
-    squeezed_right: Entity,
-    stick_pos_left: Entity,
-    stick_pos_right: Entity,
-    method_pose_left: Entity,
-    method_pose_right: Entity,
+    pub trigger_pulled_left: Entity,
+    pub trigger_pulled_right: Entity,
+    pub squeezed_left: Entity,
+    pub squeezed_right: Entity,
+    pub stick_pos_left: Entity,
+    pub stick_pos_right: Entity,
+    pub method_pose_left: Entity,
+    pub method_pose_right: Entity,
+    pub secondary_interact_left: Entity,
+    pub secondary_interact_right: Entity,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Component)]
+struct ControllerActions {
+    trigger_pulled: Entity,
+    squeezed: Entity,
+    stick_pos: Entity,
+    method_pose: Entity,
+    secondary_interact: Entity,
 }
 
 fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
@@ -126,7 +148,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
             "Left Trigger Pulled",
             set,
         ))
-        .insert(BoolActionValue::default())
+        .insert(F32ActionValue::default())
         // TODO: add more bindings
         .insert(
             OxrActionBlueprint::default()
@@ -141,7 +163,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
             "Right Trigger Pulled",
             set,
         ))
-        .insert(BoolActionValue::default())
+        .insert(F32ActionValue::default())
         // TODO: add more bindings
         .insert(
             OxrActionBlueprint::default()
@@ -156,7 +178,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
             "Left Grip Squeezed",
             set,
         ))
-        .insert(BoolActionValue::default())
+        .insert(F32ActionValue::default())
         // TODO: add more bindings
         .insert(
             OxrActionBlueprint::default()
@@ -171,7 +193,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
             "Right Grip Squeezed",
             set,
         ))
-        .insert(BoolActionValue::default())
+        .insert(F32ActionValue::default())
         // TODO: add more bindings
         .insert(
             OxrActionBlueprint::default()
@@ -186,6 +208,11 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
             SpatialBundle::default(),
             HandSide::Left,
             LeftHand,
+            StrongGrab::default(),
+            LightGrab::default(),
+            PrimaryInteract::default(),
+            SecondaryInteract::default(),
+            Scroll::default(),
         ))
         .id();
     let method_right = cmds
@@ -194,6 +221,11 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
             SpatialBundle::default(),
             HandSide::Right,
             RightHand,
+            StrongGrab::default(),
+            LightGrab::default(),
+            PrimaryInteract::default(),
+            SecondaryInteract::default(),
+            Scroll::default(),
         ))
         .id();
     cmds.entity(root.single())
@@ -263,6 +295,37 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         )
         .id();
 
+    let secondary_interact_left = cmds
+        .spawn(ActionBundle::new(
+            "secondary_interact_left",
+            "Left Secondary Interact Position",
+            set,
+        ))
+        .insert(F32ActionValue::default())
+        // TODO: add more bindings
+        .insert(
+            OxrActionBlueprint::default()
+                .interaction_profile(OCULUS_TOUCH_PROFILE)
+                .binding("/user/hand/left/input/y/click")
+                .end(),
+        )
+        .id();
+    let secondary_interact_right = cmds
+        .spawn(ActionBundle::new(
+            "secondary_interact_right",
+            "Right Secondary Interact Position",
+            set,
+        ))
+        .insert(F32ActionValue::default())
+        // TODO: add more bindings
+        .insert(
+            OxrActionBlueprint::default()
+                .interaction_profile(OCULUS_TOUCH_PROFILE)
+                .binding("/user/hand/right/input/b/click")
+                .end(),
+        )
+        .id();
+
     cmds.insert_resource(Actions {
         set,
         trigger_pulled_left,
@@ -273,6 +336,22 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         method_pose_right,
         stick_pos_left,
         stick_pos_right,
+        secondary_interact_left,
+        secondary_interact_right,
+    });
+    cmds.entity(method_left).insert(ControllerActions {
+        trigger_pulled: trigger_pulled_left,
+        squeezed: squeezed_left,
+        stick_pos: stick_pos_left,
+        method_pose: method_pose_left,
+        secondary_interact: secondary_interact_left,
+    });
+    cmds.entity(method_right).insert(ControllerActions {
+        trigger_pulled: trigger_pulled_right,
+        squeezed: squeezed_right,
+        stick_pos: stick_pos_right,
+        method_pose: method_pose_right,
+        secondary_interact: secondary_interact_right,
     });
 }
 
@@ -295,7 +374,8 @@ fn spawn_input_methods(
 
 #[derive(Clone, Copy, Component, Debug, Default)]
 pub struct XrControllerInputMethodData {
-    pub trigger_pulled: bool,
-    pub squeezed: bool,
+    pub trigger_pulled: f32,
+    pub squeezed: f32,
     pub stick_pos: Vec2,
+    pub secondary_interact: f32,
 }
