@@ -31,22 +31,22 @@ fn move_pointer(
 ) {
     let mut p = pointer.single_mut();
     if keys.pressed(KeyCode::KeyW) {
-        p.translation.z += time.delta_seconds() * -2.0;
+        p.translation.z += time.delta_secs() * -2.0;
     }
     if keys.pressed(KeyCode::KeyS) {
-        p.translation.z += time.delta_seconds() * 2.0;
+        p.translation.z += time.delta_secs() * 2.0;
     }
     if keys.pressed(KeyCode::KeyA) {
-        p.translation.x += time.delta_seconds() * -2.0;
+        p.translation.x += time.delta_secs() * -2.0;
     }
     if keys.pressed(KeyCode::KeyD) {
-        p.translation.x += time.delta_seconds() * 2.0;
+        p.translation.x += time.delta_secs() * 2.0;
     }
     if keys.pressed(KeyCode::KeyE) {
-        p.translation.y += time.delta_seconds() * 2.0;
+        p.translation.y += time.delta_secs() * 2.0;
     }
     if keys.pressed(KeyCode::KeyQ) {
-        p.translation.y += time.delta_seconds() * -2.0;
+        p.translation.y += time.delta_secs() * -2.0;
     }
 }
 
@@ -63,7 +63,7 @@ fn draw_things(
         let distance = field.distance(f_pose, pointer.translation());
         giz.line(pos, pos + normal, css::GOLD);
         giz.line(pos, pos + (Vec3::Y * distance), css::RED);
-        giz.sphere(closest_point, Quat::IDENTITY, 0.01, css::MAGENTA);
+        giz.sphere(Isometry3d::new(closest_point, Quat::IDENTITY), 0.01, css::MAGENTA);
     }
     giz.axes(*pointer, 0.05);
 }

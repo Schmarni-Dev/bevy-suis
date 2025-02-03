@@ -115,13 +115,13 @@ struct Actions {
 
 fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
     let set = cmds
-        .spawn(ActionSetBundle::new(
+        .spawn(ActionSet::new(
             "suis",
             "Spatial Universal Interaction System",
         ))
         .id();
     let trigger_pulled_left = cmds
-        .spawn(ActionBundle::new(
+        .spawn(Action::new(
             "trigger_pulled_left",
             "Left Trigger Pulled",
             set,
@@ -136,7 +136,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         )
         .id();
     let trigger_pulled_right = cmds
-        .spawn(ActionBundle::new(
+        .spawn(Action::new(
             "trigger_pulled_right",
             "Right Trigger Pulled",
             set,
@@ -151,7 +151,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         )
         .id();
     let squeezed_left = cmds
-        .spawn(ActionBundle::new(
+        .spawn(Action::new(
             "squeezed_left",
             "Left Grip Squeezed",
             set,
@@ -166,7 +166,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         )
         .id();
     let squeezed_right = cmds
-        .spawn(ActionBundle::new(
+        .spawn(Action::new(
             "squeezed_right",
             "Right Grip Squeezed",
             set,
@@ -183,7 +183,8 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
     let method_left = cmds
         .spawn((
             XrControllerInputMethodData::default(),
-            SpatialBundle::default(),
+            Transform::default(),
+            Visibility::default(),
             HandSide::Left,
             LeftHand,
         ))
@@ -191,7 +192,8 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
     let method_right = cmds
         .spawn((
             XrControllerInputMethodData::default(),
-            SpatialBundle::default(),
+            Transform::default(),
+            Visibility::default(),
             HandSide::Right,
             RightHand,
         ))
@@ -200,7 +202,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         .add_child(method_left)
         .add_child(method_right);
     let method_pose_left = cmds
-        .spawn(ActionBundle::new(
+        .spawn(Action::new(
             "method_pose_left",
             "Left Input Pose",
             set,
@@ -216,7 +218,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         )
         .id();
     let method_pose_right = cmds
-        .spawn(ActionBundle::new(
+        .spawn(Action::new(
             "method_pose_right",
             "Right Input Pose",
             set,
@@ -232,7 +234,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         )
         .id();
     let stick_pos_left = cmds
-        .spawn(ActionBundle::new(
+        .spawn(Action::new(
             "stick_value_left",
             "Left Stick Position",
             set,
@@ -248,7 +250,7 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
         .id();
 
     let stick_pos_right = cmds
-        .spawn(ActionBundle::new(
+        .spawn(Action::new(
             "stick_value_right",
             "Right Stick Position",
             set,
