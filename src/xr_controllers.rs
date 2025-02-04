@@ -16,9 +16,9 @@ pub struct SuisXrControllerPlugin;
 
 impl Plugin for SuisXrControllerPlugin {
     fn build(&self, app: &mut App) {
-        //if *app.world().resource::<XrState>() == XrState::Unavailable {
-        //    return;
-        //}
+        if *app.world().resource::<XrState>() == XrState::Unavailable {
+            return;
+        }
         if !app.is_plugin_added::<SchminputPlugin>() {
             // assuming that all plugins are missing, adding minimal plugins
             app.add_plugins(SchminputPlugin);
