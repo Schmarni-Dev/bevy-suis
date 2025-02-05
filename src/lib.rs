@@ -200,7 +200,7 @@ fn run_capture_conditions(world: &mut World) {
     }
     for (method_entity, point, handler_entity) in interactions.into_iter() {
         fn x(world: &mut World, entity: Entity) -> Option<(Entity, InputMethod, GlobalTransform)> {
-            let mut e = world.get_entity_mut(entity)?;
+            let mut e = world.get_entity_mut(entity).ok()?;
             Some((entity, e.take()?, e.get().copied()?))
         }
         let Some((method_entity, mut method, method_location)) = x(world, method_entity) else {
@@ -210,7 +210,7 @@ fn run_capture_conditions(world: &mut World) {
             world: &mut World,
             entity: Entity,
         ) -> Option<(Entity, Field, GlobalTransform, InputHandler)> {
-            let mut e = world.get_entity_mut(entity)?;
+            let mut e = world.get_entity_mut(entity).ok()?;
             Some((
                 entity,
                 e.get::<Field>().copied()?,
@@ -298,11 +298,11 @@ pub struct InputHandlerCaptures {
 
 #[derive(Component, Debug)]
 pub struct InputHandler {
-    pub capture_condition: Box<dyn System<In = CaptureContext, Out = bool>>,
+    pub capture_condition: Box<dyn System<In = In<CaptureContext>, Out = bool>>,
 }
 
 impl InputHandler {
-    pub fn new<T>(system: impl IntoSystem<CaptureContext, bool, T>) -> InputHandler {
+    pub fn new<T>(system: impl IntoSystem<In<CaptureContext>, bool, T>) -> InputHandler {
         InputHandler {
             capture_condition: Box::new(IntoSystem::into_system(system)),
         }

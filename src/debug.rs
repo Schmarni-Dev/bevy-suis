@@ -41,7 +41,7 @@ fn draw_fields(field_query: Query<(&GlobalTransform, &Field)>, mut gizmos: Gizmo
         let (_, field_rot, field_pos) = field.0.to_scale_rotation_translation();
         match field.1 {
             Field::Sphere(r) => {
-                gizmos.sphere(field_pos, field_rot, *r, css::LIME);
+                gizmos.sphere(Isometry3d::new(field_pos, field_rot), *r, css::LIME);
             }
             Field::Cuboid(cuboid) => gizmos.cuboid(
                 field
