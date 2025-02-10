@@ -14,7 +14,6 @@ pub mod raymarching;
 pub mod window_pointers;
 pub mod xr;
 pub mod xr_controllers;
-pub mod semantic_input;
 
 pub struct SuisCorePlugin;
 impl Plugin for SuisCorePlugin {

@@ -1,7 +1,4 @@
-use crate::{
-    semantic_input::{LightGrab, PrimaryInteract, StrongGrab},
-    InputMethodActive,
-};
+use crate::InputMethodActive;
 use bevy::prelude::*;
 use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
 use bevy_mod_xr::{
@@ -30,24 +27,13 @@ fn update_hand_input_methods(
             &mut Transform,
             &SuisXrHandJoints,
             &mut InputMethodActive,
-            &mut StrongGrab,
-            &mut LightGrab,
-            &mut PrimaryInteract,
         ),
         With<InputMethod>,
     >,
     flag_query: Query<&XrSpaceLocationFlags>,
     xr_hand_joint_query: Query<(&GlobalTransform, &HandBoneRadius)>,
 ) {
-    for (
-        mut hand_data,
-        mut method_transform,
-        joint_entities,
-        mut active,
-        mut strong_gram,
-        mut light_grab,
-        mut primary_interact,
-    ) in &mut hand_method_query
+    for (mut hand_data, mut method_transform, joint_entities, mut active) in &mut hand_method_query
     {
         let Ok(joints) = xr_hand_joint_query.get_many(joint_entities.0) else {
             warn!("unable to get hand joints");
@@ -61,9 +47,6 @@ fn update_hand_input_methods(
         let alt_joints = joints.map(|(t, r)| (t.compute_transform(), r));
         let pinch = pinch_activation(&alt_joints);
         let grab = grab_activation(&alt_joints);
-        strong_gram.0 = grab;
-        light_grab.0 = pinch;
-        primary_interact.0 = pinch;
 
         let hand = Hand::from_data(&joints);
         *method_transform = joints[HandBone::IndexTip as usize].0.compute_transform();
@@ -125,9 +108,6 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
         SuisXrHandJoints(left_bones),
         LeftHand,
         HandSide::Left,
-        StrongGrab::default(),
-        LightGrab::default(),
-        PrimaryInteract::default(),
     ));
     cmds.spawn((
         SpatialBundle::default(),
@@ -136,9 +116,6 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
         SuisXrHandJoints(right_bones),
         RightHand,
         HandSide::Right,
-        StrongGrab::default(),
-        LightGrab::default(),
-        PrimaryInteract::default(),
     ));
 }
 

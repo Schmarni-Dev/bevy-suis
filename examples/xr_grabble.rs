@@ -86,7 +86,7 @@ fn move_grabble(
             grabbing |= finger_separation(&hand, GRAB_SEPARATION);
         }
         if let Some(controller) = controller_data {
-            grabbing |= controller.squeezed;
+            grabbing |= controller.squeezed > 0.9;
         }
         if let Some(mouse) = mouse_data.as_ref() {
             grabbing |= mouse.left_button.pressed;
@@ -191,7 +191,7 @@ fn capture_condition(
             grabbing |= finger_separation(&hand, GRAB_SEPARATION);
         }
         if let Some(controller) = controller_data {
-            grabbing |= controller.squeezed;
+            grabbing |= controller.squeezed > 0.9;
         }
         if let Some(mouse) = mouse_data {
             grabbing |= mouse.left_button.pressed;

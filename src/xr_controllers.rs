@@ -8,10 +8,7 @@ use schminput::openxr::OxrInputPlugin;
 use schminput::xr::AttachSpaceToEntity;
 use schminput::{prelude::*, SchminputPlugin, SchminputSet};
 
-use crate::{
-    semantic_input::{LightGrab, PrimaryInteract, Scroll, SecondaryInteract, StrongGrab},
-    InputMethodActive,
-};
+use crate::InputMethodActive;
 
 use crate::{xr::HandSide, InputMethod};
 
@@ -65,28 +62,11 @@ fn update_method_data(
     vec2_query: Query<&Vec2ActionValue>,
     f32_query: Query<&F32ActionValue>,
     mut method_query: Query<
-        (
-            &ControllerActions,
-            &mut XrControllerInputMethodData,
-            &mut StrongGrab,
-            &mut LightGrab,
-            &mut PrimaryInteract,
-            &mut SecondaryInteract,
-            &mut Scroll,
-        ),
+        (&ControllerActions, &mut XrControllerInputMethodData),
         With<InputMethod>,
     >,
 ) {
-    for (
-        actions,
-        mut data,
-        mut strong_grab,
-        mut light_grab,
-        mut primary_interact,
-        mut secondary_interact,
-        mut scroll,
-    ) in &mut method_query
-    {
+    for (actions, mut data) in &mut method_query {
         let trigger_pulled = f32_query
             .get(actions.trigger_pulled)
             .expect("not an f32 action?");
@@ -97,14 +77,9 @@ fn update_method_data(
         let secondary_interact_data = f32_query
             .get(actions.secondary_interact)
             .expect("not an f32 action?");
-        data.trigger_pulled = trigger_pulled.any;
-        data.squeezed = squeezed.any;
+        data.trigger_pull = trigger_pulled.any;
+        data.squeeze = squeezed.any;
         data.stick_pos = stick_pos.any;
-        strong_grab.0 = squeezed.any;
-        light_grab.0 = squeezed.any;
-        primary_interact.0 = trigger_pulled.any;
-        secondary_interact.0 = secondary_interact_data.any;
-        scroll.0 = stick_pos.any;
     }
 }
 
@@ -208,11 +183,6 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
             SpatialBundle::default(),
             HandSide::Left,
             LeftHand,
-            StrongGrab::default(),
-            LightGrab::default(),
-            PrimaryInteract::default(),
-            SecondaryInteract::default(),
-            Scroll::default(),
         ))
         .id();
     let method_right = cmds
@@ -221,11 +191,6 @@ fn setup(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
             SpatialBundle::default(),
             HandSide::Right,
             RightHand,
-            StrongGrab::default(),
-            LightGrab::default(),
-            PrimaryInteract::default(),
-            SecondaryInteract::default(),
-            Scroll::default(),
         ))
         .id();
     cmds.entity(root.single())
@@ -374,8 +339,15 @@ fn spawn_input_methods(
 
 #[derive(Clone, Copy, Component, Debug, Default)]
 pub struct XrControllerInputMethodData {
-    pub trigger_pulled: f32,
-    pub squeezed: f32,
+    pub select: bool,
+    pub trigger_pull: f32,
+    pub trigger_pulled: bool,
+    pub squeeze: f32,
+    pub squeezed: bool,
     pub stick_pos: Vec2,
+    pub stick_touched: bool,
+    pub touchpad_pos: Vec2,
+    pub touchpad_pressed: bool,
+    pub touchpad_touched: bool,
     pub secondary_interact: f32,
 }
