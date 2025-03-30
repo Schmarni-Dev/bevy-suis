@@ -1,5 +1,5 @@
 use crate::InputMethodActive;
-use bevy::prelude::*;
+use bevy::{math::Affine3, prelude::*};
 use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
 use bevy_mod_xr::{
     hands::{HandBone, HandBoneRadius, LeftHand, RightHand, XrHandBoneEntities, HAND_JOINT_COUNT},
@@ -44,9 +44,6 @@ fn update_hand_input_methods(
             .copied()
             .unwrap_or_default();
         active.0 = flags.position_tracked || flags.rotation_tracked;
-        let alt_joints = joints.map(|(t, r)| (t.compute_transform(), r));
-        let pinch = pinch_activation(&alt_joints);
-        let grab = grab_activation(&alt_joints);
 
         let hand = Hand::from_data(&joints);
         *method_transform = joints[HandBone::IndexTip as usize].0.compute_transform();
@@ -104,7 +101,7 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
     cmds.spawn((
         SpatialBundle::default(),
         InputMethod::new(),
-        HandInputMethodData(Hand::empty()),
+        HandInputMethodData::new(),
         SuisXrHandJoints(left_bones),
         LeftHand,
         HandSide::Left,
@@ -112,7 +109,7 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
     cmds.spawn((
         SpatialBundle::default(),
         InputMethod::new(),
-        HandInputMethodData(Hand::empty()),
+        HandInputMethodData::new(),
         SuisXrHandJoints(right_bones),
         RightHand,
         HandSide::Right,
@@ -196,38 +193,6 @@ pub enum HandSide {
 #[derive(Clone, Copy, Component, Debug)]
 pub struct SuisInputXrHand;
 
-const PINCH_MAX: f32 = 0.11;
-const PINCH_ACTIVACTION_DISTANCE: f32 = 0.01;
-fn pinch_activation(
-    joints: &[(Transform, &HandBoneRadius); bevy_mod_xr::hands::HAND_JOINT_COUNT],
-) -> f32 {
-    let combined_radius =
-        joints[HandBone::ThumbTip as usize].1 .0 + joints[HandBone::IndexTip as usize].1 .0;
-    let pinch_dist = joints[HandBone::ThumbTip as usize]
-        .0
-        .translation
-        .distance(joints[HandBone::IndexTip as usize].0.translation)
-        - combined_radius;
-    (1.0 - ((pinch_dist - PINCH_ACTIVACTION_DISTANCE) / (PINCH_MAX - PINCH_ACTIVACTION_DISTANCE)))
-        .clamp(0.0, 1.0)
-}
-
-const GRIP_MAX: f32 = 0.11;
-const GRIP_ACTIVACTION_DISTANCE: f32 = 0.01;
-fn grab_activation(
-    joints: &[(Transform, &HandBoneRadius); bevy_mod_xr::hands::HAND_JOINT_COUNT],
-) -> f32 {
-    let combined_radius =
-        joints[HandBone::RingTip as usize].1 .0 + joints[HandBone::RingMetacarpal as usize].1 .0;
-    let grip_dist = joints[HandBone::RingTip as usize]
-        .0
-        .translation
-        .distance(joints[HandBone::RingMetacarpal as usize].0.translation)
-        - combined_radius;
-    (1.0 - ((grip_dist - GRIP_ACTIVACTION_DISTANCE) / (GRIP_MAX - GRIP_ACTIVACTION_DISTANCE)))
-        .clamp(0.0, 1.0)
-}
-
 #[derive(Clone, Copy, Debug)]
 pub struct Joint {
     pub pos: Vec3,
@@ -295,6 +260,35 @@ pub struct Hand {
     pub ring: Finger,
     pub little: Finger,
 }
+
+impl Hand {
+    pub fn pinch(&self) -> f32 {
+        self.pinch_between(&self.thumb.tip, &self.index.tip)
+    }
+
+    pub fn grab(&self) -> f32 {
+        self.pinch_between(&self.ring.tip, &self.ring.metacarpal)
+    }
+
+    pub fn pinch_between<'a>(&'a self, joint_1: &'a Joint, joint_2: &'a Joint) -> f32 {
+        const PINCH_MAX: f32 = 0.11;
+        const PINCH_ACTIVACTION_DISTANCE: f32 = 0.01;
+        self.pinch_between_with_params(joint_1, joint_2, PINCH_ACTIVACTION_DISTANCE, PINCH_MAX)
+    }
+    pub fn pinch_between_with_params<'a>(
+        &'a self,
+        joint_1: &'a Joint,
+        joint_2: &'a Joint,
+        activation_distance: f32,
+        pinch_max: f32,
+    ) -> f32 {
+        let combined_radius = joint_1.radius + joint_2.radius;
+        let pinch_dist = joint_1.pos.distance(joint_2.pos) - combined_radius;
+        (1.0 - ((pinch_dist - activation_distance) / (pinch_max - activation_distance)))
+            .clamp(0.0, 1.0)
+    }
+}
+
 impl Hand {
     pub fn from_data(data: &[(&GlobalTransform, &HandBoneRadius); HAND_JOINT_COUNT]) -> Hand {
         Hand {

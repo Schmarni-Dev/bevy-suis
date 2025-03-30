@@ -8,11 +8,16 @@ use bevy_suis::{
     debug::SuisDebugGizmosPlugin,
     window_pointers::{MouseInputMethodData, SuisWindowPointerPlugin},
     xr::{Hand, HandInputMethodData, SuisXrPlugin},
-    xr_controllers::{SuisXrControllerPlugin, XrControllerInputMethodData},
+    xr_controllers::{
+        default_bindings::SuisXrControllerDefaultBindingsPlugin,
+        interaction_profiles::SupportedInteractionProfiles, SuisXrControllerPlugin,
+        XrControllerInputMethodData,
+    },
     CaptureContext, Field, InputHandler, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
 };
 use bevy_xr_utils::hand_gizmos::HandGizmosPlugin;
 use openxr::ReferenceSpaceType;
+use schminput::ActionBundle;
 
 // TODO: improve capturing mechanism
 fn main() -> AppExit {
@@ -26,6 +31,10 @@ fn main() -> AppExit {
             SuisDebugGizmosPlugin,
             SuisXrControllerPlugin,
             SuisWindowPointerPlugin,
+            SuisXrControllerDefaultBindingsPlugin {
+                supported_interaction_profiles: SupportedInteractionProfiles::new()
+                    .with_oculus_touch(),
+            },
             HandGizmosPlugin,
         ))
         .add_systems(Startup, setup)
@@ -86,7 +95,7 @@ fn move_grabble(
             grabbing |= finger_separation(&hand, GRAB_SEPARATION);
         }
         if let Some(controller) = controller_data {
-            grabbing |= controller.squeezed > 0.9;
+            grabbing |= controller.squeeze.squeezed;
         }
         if let Some(mouse) = mouse_data.as_ref() {
             grabbing |= mouse.left_button.pressed;
@@ -172,7 +181,6 @@ fn capture_condition(
         return false;
     }
 
-    // threshold needed to be this high else controllers wouldn't rellieably capture, idk why
     let mut capture = ctx.distance < 0.0;
     let Ok((hand_data, is_pointer, mouse_data, controller_data)) = query.get(ctx.input_method)
     else {
@@ -191,7 +199,7 @@ fn capture_condition(
             grabbing |= finger_separation(&hand, GRAB_SEPARATION);
         }
         if let Some(controller) = controller_data {
-            grabbing |= controller.squeezed > 0.9;
+            grabbing |= controller.squeeze.squeezed;
         }
         if let Some(mouse) = mouse_data {
             grabbing |= mouse.left_button.pressed;
