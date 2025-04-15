@@ -14,6 +14,8 @@ pub mod raymarching;
 pub mod window_pointers;
 pub mod xr;
 pub mod xr_controllers;
+pub mod input_method_data;
+pub mod hand;
 
 pub struct SuisCorePlugin;
 impl Plugin for SuisCorePlugin {

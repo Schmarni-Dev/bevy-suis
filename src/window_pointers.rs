@@ -5,12 +5,16 @@ use bevy::{
     window::{PrimaryWindow, WindowRef},
 };
 
-use crate::{InputMethod, InputMethodActive, PointerInputMethod, SuisPreUpdateSets};
+use crate::{
+    input_method_data::InputMethodData, InputMethod, InputMethodActive, PointerInputMethod,
+    SuisPreUpdateSets,
+};
 
 pub struct SuisWindowPointerPlugin;
 
 impl Plugin for SuisWindowPointerPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<SuisMouseConfig>();
         app.add_systems(
             PreUpdate,
             (update_input_method_ray, update_mouse_data)
@@ -37,7 +41,8 @@ fn spawn_method_on_entity(cmds: &mut Commands, e: Entity) {
         .spawn((
             InputMethod::new(),
             PointerInputMethod(Ray3d::new(Vec3::ZERO, Vec3::NEG_Z)),
-            MouseInputMethodData::default(),
+            MouseInputMethod,
+            InputMethodData::default(),
             SpatialBundle::default(),
         ))
         .id();
@@ -93,41 +98,28 @@ fn spawn_input_methods(
 }
 
 #[derive(Clone, Copy, Component, Debug, Default)]
-pub struct MouseInputMethodData {
-    pub left_button: ButtonState,
-    pub middle_button: ButtonState,
-    pub right_button: ButtonState,
-    /// How many Lines to scroll
-    pub discrete_scroll: Vec2,
-    /// How many Pixels to scroll
-    pub continuous_scroll: Vec2,
-}
+pub struct MouseInputMethod;
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ButtonState {
-    pub just_pressed: bool,
-    pub pressed: bool,
-    pub just_released: bool,
+#[derive(Resource)]
+pub struct SuisMouseConfig {
+    pub discrete_multiplier: f32,
+    pub continuous_multiplier: f32,
 }
-
-impl ButtonState {
-    pub fn from_button_input<T>(input: &ButtonInput<T>, button: T) -> ButtonState
-    where
-        T: Copy + Eq + std::hash::Hash + Send + Sync + 'static,
-    {
-        ButtonState {
-            just_pressed: input.just_pressed(button),
-            pressed: input.pressed(button),
-            just_released: input.just_released(button),
+impl Default for SuisMouseConfig {
+    fn default() -> Self {
+        SuisMouseConfig {
+            discrete_multiplier: 0.02,
+            continuous_multiplier: 0.002,
         }
     }
 }
 
 // doesn't handle multiple windows correctly
 fn update_mouse_data(
-    mut query: Query<&mut MouseInputMethodData, With<InputMethod>>,
+    mut query: Query<&mut InputMethodData, (With<InputMethod>, With<MouseInputMethod>)>,
     mut scroll: EventReader<MouseWheel>,
     buttons: Res<ButtonInput<MouseButton>>,
+    config: Res<SuisMouseConfig>,
 ) {
     let mut discrete = Vec2::ZERO;
     let mut continuous = Vec2::ZERO;
@@ -144,11 +136,13 @@ fn update_mouse_data(
         }
     }
     for mut data in query.iter_mut() {
-        data.left_button = ButtonState::from_button_input(&buttons, MouseButton::Left);
-        data.middle_button = ButtonState::from_button_input(&buttons, MouseButton::Middle);
-        data.right_button = ButtonState::from_button_input(&buttons, MouseButton::Right);
-        data.discrete_scroll = discrete;
-        data.continuous_scroll = continuous;
+        data.select = buttons.pressed(MouseButton::Left) as u8 as f32;
+        data.context = buttons.pressed(MouseButton::Middle) as u8 as f32;
+        data.secondary = buttons.pressed(MouseButton::Right) as u8 as f32;
+        data.grab = buttons.pressed(MouseButton::Forward) as u8 as f32;
+        data.scroll = Some(
+            (discrete * config.discrete_multiplier) + (continuous * config.continuous_multiplier),
+        );
     }
 }
 

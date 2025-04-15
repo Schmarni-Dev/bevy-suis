@@ -1,10 +1,5 @@
 use bevy::prelude::*;
-use schminput::{
-    openxr::OxrActionBlueprint,
-    prelude::{RequestedSubactionPaths, SubactionPaths},
-    xr::SpaceActionValue,
-    ActionBundle, ActionSetBundle,
-};
+use schminput::{prelude::RequestedSubactionPaths, ActionSetBundle};
 
 use super::interaction_profiles::SupportedInteractionProfiles;
 
@@ -25,62 +20,48 @@ impl Plugin for SuisXrControllerDefaultBindingsPlugin {
 #[derive(SystemSet, Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub struct SuisXrControllerBindingSet;
 
-#[derive(Resource)]
-struct SupportedProfiles(SupportedInteractionProfiles);
+#[derive(Resource, Deref)]
+pub struct SupportedProfiles(SupportedInteractionProfiles);
 
 // TODO: filter interaction_profiles based on extensions/openxr version
 fn create_bindings(
     interaction_profiles: Res<SupportedProfiles>,
     mut cmds: Commands,
-    mut paths: ResMut<SubactionPaths>,
+    // mut paths: ResMut<SubactionPaths>,
 ) {
-    let set = cmds
+    let set_left = cmds
         .spawn(ActionSetBundle::new(
-            "suis_input_set",
-            "Spatial Universal Interaction System Input Sources",
+            "suis_xr_input_set_left",
+            "Spatial Universal Interaction System XR Input Sources: Left Hand",
         ))
         .id();
-    let mut req_paths = RequestedSubactionPaths::default();
-    req_paths.push(paths.get_or_create_path("/oxr/user/hand/left", &mut cmds));
-    req_paths.push(paths.get_or_create_path("/oxr/user/hand/right", &mut cmds));
-    let bindings = binding_gen::spawn_bindings(set, &mut cmds, &interaction_profiles.0, &req_paths);
-    fn get_bindings(
-        binding: &'static str,
-        profiles: &SupportedInteractionProfiles,
-    ) -> OxrActionBlueprint {
-        let mut blueprint = OxrActionBlueprint::default();
-        for v in profiles.iter().map(|v| v.get_path()) {
-            blueprint = blueprint.interaction_profile(v).binding(binding).end()
-        }
-        blueprint
-    }
-    let space_left = cmds
-        .spawn((
-            ActionBundle::new("method_pose_left", "Left Input Pose", set),
-            SpaceActionValue::default(),
-            get_bindings("/user/hand/left/input/aim/pose", &interaction_profiles.0),
+    let set_right = cmds
+        .spawn(ActionSetBundle::new(
+            "suis_xr_input_set_right",
+            "Spatial Universal Interaction System XR Input Sources: Right Hand",
         ))
         .id();
-    let space_right = cmds
-        .spawn((
-            ActionBundle::new("method_pose_right", "Right Input Pose", set),
-            SpaceActionValue::default(),
-            get_bindings("/user/hand/right/input/aim/pose", &interaction_profiles.0),
-        ))
-        .id();
-    cmds.insert_resource(bindings);
-    cmds.insert_resource(SuisXrActions {
-        set,
-        space_left,
-        space_right,
+    let req_paths = RequestedSubactionPaths::default();
+    // req_paths.push(paths.get_or_create_path("/oxr/user/hand/left", &mut cmds));
+    // req_paths.push(paths.get_or_create_path("/oxr/user/hand/right", &mut cmds));
+    let actions_left =
+        binding_gen::spawn_bindings_left(set_left, &mut cmds, &interaction_profiles, &req_paths);
+    let actions_right =
+        binding_gen::spawn_bindings_right(set_right, &mut cmds, &interaction_profiles, &req_paths);
+    cmds.insert_resource(SuisXrControllerActions {
+        set_left,
+        set_right,
+        actions_left,
+        actions_right,
     });
 }
 
 #[derive(Clone, Copy, Debug, Resource)]
-pub struct SuisXrActions {
-    pub set: Entity,
-    pub space_left: Entity,
-    pub space_right: Entity,
+pub struct SuisXrControllerActions {
+    pub set_left: Entity,
+    pub set_right: Entity,
+    pub actions_left: XrControllerInputActions,
+    pub actions_right: XrControllerInputActions,
 }
 
 #[cfg(test)]
@@ -95,48 +76,64 @@ mod tests {
         let mut queue = CommandQueue::default();
         let mut cmds = Commands::new(&mut queue, &world);
 
-        let set = cmds
+        let set_left = cmds
             .spawn(ActionSetBundle::new(
-                "suis_input_set",
-                "Spatial Universal Interaction System Input Sources",
+                "suis_xr_input_set_left",
+                "Spatial Universal Interaction System XR Input Sources: Left Hand",
             ))
             .id();
-        let bindings = binding_gen::spawn_bindings(
-            set,
+        let bindings_left = binding_gen::spawn_bindings_left(
+            set_left,
             &mut cmds,
             &SupportedInteractionProfiles(HashSet::new()),
             &RequestedSubactionPaths::default(),
         );
-        let w = bindings
-            .iter_fields()
-            .enumerate()
-            .flat_map(|(i, v)| {
-                let field_name = bindings.name_at(i).unwrap_or("NONE").to_string();
-                if v.is::<Entity>() {
-                    return vec![(field_name, v)];
-                }
-                println!("{}", v.reflect_type_path());
-                if let bevy::reflect::ReflectRef::Struct(s) = v.reflect_ref() {
-                    s.iter_fields()
-                        .enumerate()
-                        .map(|(i, v)| {
-                            let str = format!("{field_name}.{}", s.name_at(i).unwrap_or("NONE"));
-                            (str, v)
-                        })
-                        .collect::<Vec<_>>()
-                } else {
-                    vec![(field_name, v)]
-                }
-            })
-            .map(|(str, v)| {
-                println!("{str}");
-                v
-            })
-            .any(|v| {
-                v.downcast_ref::<Entity>()
-                    .is_none_or(|v| *v == Entity::PLACEHOLDER)
-            });
-        assert!(!w);
+        let set_right = cmds
+            .spawn(ActionSetBundle::new(
+                "suis_xr_input_set_right",
+                "Spatial Universal Interaction System XR Input Sources: Right Hand",
+            ))
+            .id();
+        let bindings_right = binding_gen::spawn_bindings_right(
+            set_right,
+            &mut cmds,
+            &SupportedInteractionProfiles(HashSet::new()),
+            &RequestedSubactionPaths::default(),
+        );
+        fn check(bindings: XrControllerInputActions) -> bool {
+            bindings
+                .iter_fields()
+                .enumerate()
+                .flat_map(|(i, v)| {
+                    let field_name = bindings.name_at(i).unwrap_or("NONE").to_string();
+                    if v.is::<Entity>() {
+                        return vec![(field_name, v)];
+                    }
+                    println!("{}", v.reflect_type_path());
+                    if let bevy::reflect::ReflectRef::Struct(s) = v.reflect_ref() {
+                        s.iter_fields()
+                            .enumerate()
+                            .map(|(i, v)| {
+                                let str =
+                                    format!("{field_name}.{}", s.name_at(i).unwrap_or("NONE"));
+                                (str, v)
+                            })
+                            .collect::<Vec<_>>()
+                    } else {
+                        vec![(field_name, v)]
+                    }
+                })
+                .map(|(str, v)| {
+                    println!("{str}");
+                    v
+                })
+                .any(|v| {
+                    v.downcast_ref::<Entity>()
+                        .is_none_or(|v| *v == Entity::PLACEHOLDER)
+                })
+        }
+        assert!(!check(bindings_left));
+        assert!(!check(bindings_right));
     }
 }
 
@@ -147,199 +144,224 @@ mod binding_gen {
         gen_bindings, xr_controllers::interaction_profiles::SupportedInteractionProfile as Profile,
     };
     use schminput::{
-        openxr::OxrActionBlueprint, ActionBundle, BoolActionValue as Bool, F32ActionValue as F32,
-        Vec2ActionValue as Vec2,
+        openxr::OxrActionBlueprint, xr::SpaceActionValue as Space, ActionBundle,
+        F32ActionValue as F32, Vec2ActionValue as Vec2,
     };
 
     use super::XrControllerInputActions;
     gen_bindings!(
-        spawn_bindings,
+        spawn_bindings_left,
         (
-            trigger.touched,
-            "Trigger Touch",
-            Bool,
-            [
-                Profile::Pico4 => ("/user/hand/left/input/trigger/touch", "/user/hand/right/input/trigger/touch"),
-                Profile::ViveFocus3  => ("/user/hand/left/input/trigger/touch", "/user/hand/right/input/trigger/touch"),
-                Profile::OculusTouch => ("/user/hand/left/input/trigger/touch", "/user/hand/right/input/trigger/touch"),
-                Profile::ValveIndex => ("/user/hand/left/input/trigger/touch", "/user/hand/right/input/trigger/touch")
-            ]
-        ),
-        (
-            trigger.pull,
-            "Trigger Pull",
-            F32,
-            [
-                Profile::Pico4 => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/value"),
-                Profile::ViveWand => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/value"),
-                Profile::ViveCosmos => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/value"),
-                Profile::ViveFocus3 => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/value"),
-                Profile::OculusTouch => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/value"),
-                Profile::ValveIndex => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/value"),
-                Profile::HpReverbG2 => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/value")
-            ]
-        ),
-        (
-            trigger.pulled,
-            "Trigger Pulled",
-            Bool,
-            [
-                Profile::Pico4 => ("/user/hand/left/input/trigger/click", "/user/hand/right/input/trigger/click"),
-                Profile::ViveWand => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/click"),
-                Profile::ViveCosmos => ("/user/hand/left/input/trigger/click", "/user/hand/right/input/trigger/click"),
-                Profile::ViveFocus3 => ("/user/hand/left/input/trigger/click", "/user/hand/right/input/trigger/click"),
-                Profile::OculusTouch => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/value"),
-                Profile::ValveIndex => ("/user/hand/left/input/trigger/click", "/user/hand/right/input/trigger/click"),
-                Profile::HpReverbG2 => ("/user/hand/left/input/trigger/value", "/user/hand/right/input/trigger/value")
-            ]
-        ),
-        (
-            squeeze.value,
-            "Squeeze",
-            F32,
-            [
-                Profile::Pico4 => ("/user/hand/left/input/squeeze/value", "/user/hand/right/input/squeeze/value"),
-                Profile::ViveFocus3 => ("/user/hand/left/input/squeeze/value", "/user/hand/right/input/squeeze/value"),
-                Profile::OculusTouch => ("/user/hand/left/input/squeeze/value", "/user/hand/right/input/squeeze/value"),
-                Profile::ValveIndex => ("/user/hand/left/input/squeeze/value", "/user/hand/right/input/squeeze/value"),
-                Profile::HpReverbG2 => ("/user/hand/left/input/squeeze/value", "/user/hand/right/input/squeeze/value")
-            ]
-        ),
-        (
-            squeeze.squeezed,
-            "Squeezed",
-            Bool,
-            [
-                Profile::Pico4 => ("/user/hand/left/input/squeeze/click", "/user/hand/right/input/squeeze/click"),
-                Profile::ViveWand => ("/user/hand/left/input/squeeze/click", "/user/hand/right/input/squeeze/click"),
-                Profile::ViveCosmos => ("/user/hand/left/input/squeeze/click", "/user/hand/right/input/squeeze/click"),
-                Profile::ViveFocus3 => ("/user/hand/left/input/squeeze/click", "/user/hand/right/input/squeeze/click"),
-                Profile::OculusTouch => ("/user/hand/left/input/squeeze/value", "/user/hand/right/input/squeeze/value"),
-                Profile::ValveIndex => ("/user/hand/left/input/squeeze/value", "/user/hand/right/input/squeeze/value"),
-                Profile::HpReverbG2 => ("/user/hand/left/input/squeeze/value", "/user/hand/right/input/squeeze/value")
-            ]
-        ),
-        (
-            squeeze.force,
-            "Squeeze Force",
-            F32,
-            [
-                Profile::ValveIndex => ("/user/hand/left/input/squeeze/force", "/user/hand/right/input/squeeze/force")
-            ]
-        ),
-        (
-            stick.pos,
-            "Thumbstick Position",
+            scroll_continuous,
+            "Scroll Continuous",
             Vec2,
             [
-                Profile::Pico4 => ("/user/hand/left/input/thumbstick", "/user/hand/right/input/thumbstick"),
-                Profile::ViveCosmos => ("/user/hand/left/input/thumbstick", "/user/hand/right/input/thumbstick"),
-                Profile::ViveFocus3 => ("/user/hand/left/input/thumbstick", "/user/hand/right/input/thumbstick"),
-                Profile::OculusTouch => ("/user/hand/left/input/thumbstick", "/user/hand/right/input/thumbstick"),
-                Profile::ValveIndex => ("/user/hand/left/input/thumbstick", "/user/hand/right/input/thumbstick"),
-                Profile::HpReverbG2 => ("/user/hand/left/input/thumbstick", "/user/hand/right/input/thumbstick")
+                Profile::Pico4 => ("/user/hand/left/input/thumbstick"),
+                Profile::ViveCosmos => ("/user/hand/left/input/thumbstick"),
+                Profile::ViveFocus3 => ("/user/hand/left/input/thumbstick"),
+                Profile::OculusTouch => ("/user/hand/left/input/thumbstick"),
+                Profile::ValveIndex => ("/user/hand/left/input/thumbstick"),
+                Profile::HpReverbG2 => ("/user/hand/left/input/thumbstick")
             ]
         ),
         (
-            stick.touched,
-            "Thumbstick Touched",
-            Bool,
-            [
-                Profile::Pico4 => ("/user/hand/left/input/thumbstick/touch", "/user/hand/right/input/thumbstick/touch"),
-                Profile::ViveCosmos => ("/user/hand/left/input/thumbstick/touch", "/user/hand/right/input/thumbstick/touch"),
-                Profile::ViveFocus3 => ("/user/hand/left/input/thumbstick/touch", "/user/hand/right/input/thumbstick/touch"),
-                Profile::OculusTouch => ("/user/hand/left/input/thumbstick/touch", "/user/hand/right/input/thumbstick/touch"),
-                Profile::ValveIndex => ("/user/hand/left/input/thumbstick/touch", "/user/hand/right/input/thumbstick/touch")
-            ]
-        ),
-        (
-            trackpad.pos,
-            "Trackpad Position",
+            scroll_delta,
+            "Scroll Delta",
             Vec2,
             [
-                Profile::ViveWand => ("/user/hand/left/input/trackpad", "/user/hand/right/input/trackpad"),
-                Profile::ValveIndex => ("/user/hand/left/input/trackpad", "/user/hand/right/input/trackpad")
+                Profile::ViveWand => ("/user/hand/left/input/trackpad"),
+                Profile::ValveIndex => ("/user/hand/left/input/trackpad")
             ]
         ),
         (
-            trackpad.pressed,
-            "Trackpad Pressed",
-            Bool,
+            input_pos,
+            "Scroll Input Position",
+            Vec2,
             [
-                Profile::ViveWand => ("/user/hand/left/input/trackpad/click", "/user/hand/right/input/trackpad/click"),
-                Profile::ValveIndex => ("/user/hand/left/input/trackpad/force", "/user/hand/right/input/trackpad/force")
+                Profile::Pico4 => ("/user/hand/left/input/thumbstick"),
+                Profile::ViveWand => ("/user/hand/left/input/trackpad"),
+                Profile::ViveCosmos => ("/user/hand/left/input/thumbstick"),
+                Profile::ViveFocus3 => ("/user/hand/left/input/thumbstick"),
+                Profile::OculusTouch => ("/user/hand/left/input/thumbstick"),
+                // index has 2 bindings, thumbstick and trackpad, prefering thumbstick for now
+                Profile::ValveIndex => ("/user/hand/left/input/thumbstick"),
+                Profile::HpReverbG2 => ("/user/hand/left/input/thumbstick")
             ]
         ),
         (
-            trackpad.touched,
-            "Trackpad Touched",
-            Bool,
-            [
-                Profile::ViveWand => ("/user/hand/left/input/trackpad/touch", "/user/hand/right/input/trackpad/touch"),
-                Profile::ValveIndex => ("/user/hand/left/input/trackpad/touch", "/user/hand/right/input/trackpad/touch")
-            ]
-        ),
-        (
-            trackpad.force,
-            "Trackpad Force",
+            select,
+            "Select",
             F32,
             [
-                Profile::ValveIndex => ("/user/hand/left/input/trackpad/force", "/user/hand/right/input/trackpad/force")
+                Profile::Pico4 => ("/user/hand/left/input/trigger/value"),
+                Profile::ViveWand => ("/user/hand/left/input/trigger/value"),
+                Profile::ViveCosmos => ("/user/hand/left/input/trigger/value"),
+                Profile::ViveFocus3 => ("/user/hand/left/input/trigger/value"),
+                Profile::OculusTouch => ("/user/hand/left/input/trigger/value"),
+                Profile::ValveIndex => ("/user/hand/left/input/trigger/value"),
+                Profile::HpReverbG2 => ("/user/hand/left/input/trigger/value")
             ]
         ),
         (
-            button_north.pressed,
-            "North Button Pressed",
-            Bool,
+            grab,
+            "Grab",
+            F32,
             [
-                Profile::Pico4 => ("/user/hand/left/input/y/click", "/user/hand/right/input/b/click"),
-                Profile::ViveCosmos => ("/user/hand/left/input/y/click", "/user/hand/right/input/b/click"),
-                Profile::ViveFocus3 => ("/user/hand/left/input/y/click", "/user/hand/right/input/b/click"),
-                Profile::OculusTouch => ("/user/hand/left/input/y/click", "/user/hand/right/input/b/click"),
-                Profile::ValveIndex => ("/user/hand/left/input/b/click", "/user/hand/right/input/b/click"),
-                Profile::HpReverbG2 => ("/user/hand/left/input/y/click", "/user/hand/right/input/b/click")
+                Profile::Pico4 => ("/user/hand/left/input/squeeze/value"),
+                Profile::ViveWand => ("/user/hand/left/input/squeeze/click"),
+                Profile::ViveFocus3 => ("/user/hand/left/input/squeeze/value"),
+                Profile::ViveCosmos => ("/user/hand/left/input/squeeze/click"),
+                Profile::OculusTouch => ("/user/hand/left/input/squeeze/value"),
+                Profile::ValveIndex => ("/user/hand/left/input/squeeze/value"),
+                Profile::HpReverbG2 => ("/user/hand/left/input/squeeze/value")
             ]
         ),
         (
-            button_north.touched,
-            "North Button Touched",
-            Bool,
+            secondary,
+            "Secondary",
+            F32,
             [
-                Profile::Pico4 => ("/user/hand/left/input/y/touch", "/user/hand/right/input/b/touch"),
-                Profile::OculusTouch => ("/user/hand/left/input/y/touch", "/user/hand/right/input/b/touch"),
-                Profile::ValveIndex => ("/user/hand/left/input/b/touch", "/user/hand/right/input/b/touch")
+                Profile::Pico4 => ("/user/hand/left/input/y/click"),
+                Profile::ViveCosmos => ("/user/hand/left/input/y/click"),
+                Profile::ViveFocus3 => ("/user/hand/left/input/y/click"),
+                Profile::OculusTouch => ("/user/hand/left/input/y/click"),
+                Profile::ValveIndex => ("/user/hand/left/input/b/click"),
+                Profile::HpReverbG2 => ("/user/hand/left/input/y/click")
             ]
         ),
         (
-            button_south.pressed,
-            "South Button Pressed",
-            Bool,
+            context,
+            "Context",
+            F32,
             [
-                Profile::Pico4 => ("/user/hand/left/input/x/click", "/user/hand/right/input/a/click"),
-                Profile::ViveCosmos => ("/user/hand/left/input/x/click", "/user/hand/right/input/a/click"),
-                Profile::ViveFocus3 => ("/user/hand/left/input/x/click", "/user/hand/right/input/a/click"),
-                Profile::OculusTouch => ("/user/hand/left/input/x/click", "/user/hand/right/input/a/click"),
-                Profile::ValveIndex => ("/user/hand/left/input/a/click", "/user/hand/right/input/a/click"),
-                Profile::HpReverbG2 => ("/user/hand/left/input/x/click", "/user/hand/right/input/a/click")
+                Profile::Pico4 => ("/user/hand/left/input/x/click"),
+                Profile::ViveCosmos => ("/user/hand/left/input/x/click"),
+                Profile::ViveFocus3 => ("/user/hand/left/input/x/click"),
+                Profile::OculusTouch => ("/user/hand/left/input/x/click"),
+                Profile::ValveIndex => ("/user/hand/left/input/a/click"),
+                Profile::HpReverbG2 => ("/user/hand/left/input/x/click")
             ]
         ),
         (
-            button_south.touched,
-            "South Button Touched",
-            Bool,
+            pose,
+            "Pose",
+            Space,
             [
-                Profile::Pico4 => ("/user/hand/left/input/x/touch", "/user/hand/right/input/a/touch"),
-                Profile::OculusTouch => ("/user/hand/left/input/x/touch", "/user/hand/right/input/a/touch"),
-                Profile::ValveIndex => ("/user/hand/left/input/a/touch", "/user/hand/right/input/a/touch")
+                Profile::ViveWand => ("/user/hand/left/input/aim/pose"),
+                Profile::OculusTouch => ("/user/hand/left/input/aim/pose"),
+                Profile::ValveIndex => ("/user/hand/left/input/aim/pose"),
+                Profile::HpReverbG2 => ("/user/hand/left/input/aim/pose"),
+                Profile::Pico4 => ("/user/hand/left/input/aim/pose"),
+                Profile::ViveCosmos => ("/user/hand/left/input/aim/pose"),
+                Profile::ViveFocus3 => ("/user/hand/left/input/aim/pose")
+            ]
+        )
+    );
+    gen_bindings!(
+        spawn_bindings_right,
+        (
+            scroll_continuous,
+            "Scroll Continuous",
+            Vec2,
+            [
+                Profile::Pico4 => ("/user/hand/right/input/thumbstick"),
+                Profile::ViveCosmos => ("/user/hand/right/input/thumbstick"),
+                Profile::ViveFocus3 => ("/user/hand/right/input/thumbstick"),
+                Profile::OculusTouch => ("/user/hand/right/input/thumbstick"),
+                Profile::ValveIndex => ("/user/hand/right/input/thumbstick"),
+                Profile::HpReverbG2 => ("/user/hand/right/input/thumbstick")
             ]
         ),
         (
-            thumbrest_touched,
-            "Thumbrest Touched",
-            Bool,
+            scroll_delta,
+            "Scroll Delta",
+            Vec2,
             [
-                Profile::ViveFocus3 => ("/user/hand/left/input/thumbrest/touch", "/user/hand/right/input/thumbrest/touch"),
-                Profile::OculusTouch => ("/user/hand/left/input/thumbrest/touch", "/user/hand/right/input/thumbrest/touch")
+                Profile::ViveWand => ("/user/hand/right/input/trackpad"),
+                Profile::ValveIndex => ("/user/hand/right/input/trackpad")
+            ]
+        ),
+        (
+            input_pos,
+            "Scroll Input Position",
+            Vec2,
+            [
+                Profile::Pico4 => ("/user/hand/right/input/thumbstick"),
+                Profile::ViveWand => ("/user/hand/right/input/trackpad"),
+                Profile::ViveCosmos => ("/user/hand/right/input/thumbstick"),
+                Profile::ViveFocus3 => ("/user/hand/right/input/thumbstick"),
+                Profile::OculusTouch => ("/user/hand/right/input/thumbstick"),
+                // index has 2 bindings, thumbstick and trackpad, prefering thumbstick for now
+                Profile::ValveIndex => ("/user/hand/right/input/thumbstick"),
+                Profile::HpReverbG2 => ("/user/hand/right/input/thumbstick")
+            ]
+        ),
+        (
+            select,
+            "Select",
+            F32,
+            [
+                Profile::Pico4 => ("/user/hand/right/input/trigger/value"),
+                Profile::ViveWand => ("/user/hand/right/input/trigger/value"),
+                Profile::ViveCosmos => ("/user/hand/right/input/trigger/value"),
+                Profile::ViveFocus3 => ("/user/hand/right/input/trigger/value"),
+                Profile::OculusTouch => ("/user/hand/right/input/trigger/value"),
+                Profile::ValveIndex => ("/user/hand/right/input/trigger/value"),
+                Profile::HpReverbG2 => ("/user/hand/right/input/trigger/value")
+            ]
+        ),
+        (
+            grab,
+            "Grab",
+            F32,
+            [
+                Profile::Pico4 => ("/user/hand/right/input/squeeze/value"),
+                Profile::ViveWand => ("/user/hand/right/input/squeeze/click"),
+                Profile::ViveFocus3 => ("/user/hand/right/input/squeeze/value"),
+                Profile::ViveCosmos => ("/user/hand/right/input/squeeze/click"),
+                Profile::OculusTouch => ("/user/hand/right/input/squeeze/value"),
+                Profile::ValveIndex => ("/user/hand/right/input/squeeze/value"),
+                Profile::HpReverbG2 => ("/user/hand/right/input/squeeze/value")
+            ]
+        ),
+        (
+            secondary,
+            "Secondary",
+            F32,
+            [
+                Profile::Pico4 => ("/user/hand/right/input/b/click"),
+                Profile::ViveCosmos => ("/user/hand/right/input/b/click"),
+                Profile::ViveFocus3 => ("/user/hand/right/input/b/click"),
+                Profile::OculusTouch => ("/user/hand/right/input/b/click"),
+                Profile::ValveIndex => ("/user/hand/right/input/b/click"),
+                Profile::HpReverbG2 => ("/user/hand/right/input/b/click")
+            ]
+        ),
+        (
+            context,
+            "Context",
+            F32,
+            [
+                Profile::Pico4 => ("/user/hand/right/input/a/click"),
+                Profile::ViveCosmos => ("/user/hand/right/input/a/click"),
+                Profile::ViveFocus3 => ("/user/hand/right/input/a/click"),
+                Profile::OculusTouch => ("/user/hand/right/input/a/click"),
+                Profile::ValveIndex => ("/user/hand/right/input/a/click"),
+                Profile::HpReverbG2 => ("/user/hand/right/input/a/click")
+            ]
+        ),
+        (
+            pose,
+            "Pose",
+            Space,
+            [
+                Profile::ViveWand => ("/user/hand/right/input/aim/pose"),
+                Profile::OculusTouch => ("/user/hand/right/input/aim/pose"),
+                Profile::ValveIndex => ("/user/hand/right/input/aim/pose"),
+                Profile::HpReverbG2 => ("/user/hand/right/input/aim/pose"),
+                Profile::Pico4 => ("/user/hand/right/input/aim/pose"),
+                Profile::ViveCosmos => ("/user/hand/right/input/aim/pose"),
+                Profile::ViveFocus3 => ("/user/hand/right/input/aim/pose")
             ]
         )
     );
@@ -373,98 +395,27 @@ macro_rules! gen_bindings {
         }
     };
 }
-
-pub fn make_placeholder_action_struct() -> XrControllerInputActions {
+fn make_placeholder_action_struct() -> XrControllerInputActions {
     XrControllerInputActions {
-        trigger: TriggerActions {
-            pull: Entity::PLACEHOLDER,
-            pulled: Entity::PLACEHOLDER,
-            touched: Entity::PLACEHOLDER,
-        },
-        squeeze: SqueezeActions {
-            value: Entity::PLACEHOLDER,
-            squeezed: Entity::PLACEHOLDER,
-            force: Entity::PLACEHOLDER,
-        },
-        stick: StickActions {
-            pos: Entity::PLACEHOLDER,
-            touched: Entity::PLACEHOLDER,
-        },
-        trackpad: TrackpadActions {
-            pos: Entity::PLACEHOLDER,
-            pressed: Entity::PLACEHOLDER,
-            touched: Entity::PLACEHOLDER,
-            force: Entity::PLACEHOLDER,
-        },
-        button_north: TouchButtonActions {
-            pressed: Entity::PLACEHOLDER,
-            touched: Entity::PLACEHOLDER,
-        },
-        button_south: TouchButtonActions {
-            pressed: Entity::PLACEHOLDER,
-            touched: Entity::PLACEHOLDER,
-        },
-        thumbrest_touched: Entity::PLACEHOLDER,
+        scroll_continuous: Entity::PLACEHOLDER,
+        scroll_delta: Entity::PLACEHOLDER,
+        input_pos: Entity::PLACEHOLDER,
+        select: Entity::PLACEHOLDER,
+        secondary: Entity::PLACEHOLDER,
+        context: Entity::PLACEHOLDER,
+        grab: Entity::PLACEHOLDER,
+        pose: Entity::PLACEHOLDER,
     }
 }
 
-#[derive(Clone, Copy, Resource, Debug, Reflect)]
+#[derive(Clone, Copy, Debug, Reflect)]
 pub struct XrControllerInputActions {
-    pub trigger: TriggerActions,
-    pub squeeze: SqueezeActions,
-    pub stick: StickActions,
-    pub trackpad: TrackpadActions,
-    // using north and south to add support for the leaked deckard controllers in the future
-    pub button_north: TouchButtonActions,
-    pub button_south: TouchButtonActions,
-
-    pub thumbrest_touched: Entity,
-}
-
-#[derive(Clone, Copy, Debug, Reflect)]
-pub struct TriggerActions {
-    /// f32
-    pub pull: Entity,
-    /// bool
-    pub pulled: Entity,
-    /// bool
-    pub touched: Entity,
-}
-
-#[derive(Clone, Copy, Debug, Reflect)]
-pub struct SqueezeActions {
-    /// f32
-    pub value: Entity,
-    /// bool
-    pub squeezed: Entity,
-    /// f32
-    pub force: Entity,
-}
-
-#[derive(Clone, Copy, Debug, Reflect)]
-pub struct StickActions {
-    /// Vec2
-    pub pos: Entity,
-    /// bool
-    pub touched: Entity,
-}
-
-#[derive(Clone, Copy, Debug, Reflect)]
-pub struct TrackpadActions {
-    /// Vec2
-    pub pos: Entity,
-    /// bool
-    pub pressed: Entity,
-    /// bool
-    pub touched: Entity,
-    /// f32
-    pub force: Entity,
-}
-
-#[derive(Clone, Copy, Debug, Reflect)]
-pub struct TouchButtonActions {
-    /// bool
-    pub pressed: Entity,
-    /// bool
-    pub touched: Entity,
+    pub scroll_continuous: Entity,
+    pub scroll_delta: Entity,
+    pub input_pos: Entity,
+    pub select: Entity,
+    pub secondary: Entity,
+    pub context: Entity,
+    pub grab: Entity,
+    pub pose: Entity,
 }

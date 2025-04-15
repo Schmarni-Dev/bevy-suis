@@ -1,6 +1,8 @@
-use bevy::{math::Vec2, prelude::{Entity, Query}};
+use bevy::{
+    math::Vec2,
+    prelude::{Entity, Query},
+};
 use schminput::{subaction_paths::SubactionPath, BoolActionValue, F32ActionValue, Vec2ActionValue};
-
 
 pub(super) trait ActionValueQueryExt {
     type ReturnType;

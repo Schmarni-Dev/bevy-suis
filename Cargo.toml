@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
+[features]
+default = ["xr"]
+xr = []
+
 [dependencies]
 bevy = "0.14"
 bevy_mod_xr = "0.1.1"
@@ -19,3 +23,6 @@ bevy_xr_utils = "0.1.0"
 [lints.clippy]
 too_many_arguments = "allow"
 type_complexity = "allow"
+
+[workspace]
+members = ["bevy-suis-explicit-method-data"]

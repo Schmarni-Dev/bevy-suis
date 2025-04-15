@@ -1,5 +1,9 @@
-use crate::InputMethodActive;
-use bevy::{math::Affine3, prelude::*};
+use crate::{
+    hand::{Finger, Hand, Joint, Thumb},
+    input_method_data::InputMethodData,
+    InputMethodActive,
+};
+use bevy::prelude::*;
 use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
 use bevy_mod_xr::{
     hands::{HandBone, HandBoneRadius, LeftHand, RightHand, XrHandBoneEntities, HAND_JOINT_COUNT},
@@ -23,17 +27,18 @@ impl Plugin for SuisXrPlugin {
 fn update_hand_input_methods(
     mut hand_method_query: Query<
         (
-            &mut HandInputMethodData,
+            &mut InputMethodData,
             &mut Transform,
             &SuisXrHandJoints,
             &mut InputMethodActive,
         ),
-        With<InputMethod>,
+        (With<InputMethod>, With<HandInputMethod>),
     >,
     flag_query: Query<&XrSpaceLocationFlags>,
     xr_hand_joint_query: Query<(&GlobalTransform, &HandBoneRadius)>,
 ) {
-    for (mut hand_data, mut method_transform, joint_entities, mut active) in &mut hand_method_query
+    for (mut method_data, mut method_transform, joint_entities, mut active) in
+        &mut hand_method_query
     {
         let Ok(joints) = xr_hand_joint_query.get_many(joint_entities.0) else {
             warn!("unable to get hand joints");
@@ -47,19 +52,36 @@ fn update_hand_input_methods(
 
         let hand = Hand::from_data(&joints);
         *method_transform = joints[HandBone::IndexTip as usize].0.compute_transform();
-        hand_data.set_in_global_space(hand);
+        method_data.select = hand.pinch(&GlobalTransform::IDENTITY);
+        method_data.grab = hand.grab(&GlobalTransform::IDENTITY);
+        method_data.secondary = hand.pinch_between(
+            HandBone::ThumbTip,
+            HandBone::MiddleTip,
+            &GlobalTransform::IDENTITY,
+        );
+        method_data.context = hand.pinch_between(
+            HandBone::ThumbTip,
+            HandBone::RingTip,
+            &GlobalTransform::IDENTITY,
+        );
+        method_data
+            .hand
+            .get_or_insert_default()
+            .set_in_global_space(hand);
     }
 }
 
 #[allow(clippy::type_complexity)]
 fn despawn_input_hands(
     mut cmds: Commands,
-    query: Query<Entity, Or<(With<SuisInputXrHand>, With<HandInputMethodData>)>>,
+    query: Query<Entity, Or<(With<SuisInputXrHand>, With<HandInputMethod>)>>,
 ) {
     for e in &query {
         cmds.entity(e).despawn();
     }
 }
+#[derive(Component, Clone, Copy, Debug, Reflect)]
+pub struct HandInputMethod;
 
 fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot>>) {
     use bevy_mod_xr::hands::{spawn_hand_bones, HandSide};
@@ -100,8 +122,9 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
     });
     cmds.spawn((
         SpatialBundle::default(),
+        InputMethodData::default(),
         InputMethod::new(),
-        HandInputMethodData::new(),
+        HandInputMethod,
         SuisXrHandJoints(left_bones),
         LeftHand,
         HandSide::Left,
@@ -109,77 +132,12 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
     cmds.spawn((
         SpatialBundle::default(),
         InputMethod::new(),
-        HandInputMethodData::new(),
+        InputMethodData::default(),
+        HandInputMethod,
         SuisXrHandJoints(right_bones),
         RightHand,
         HandSide::Right,
     ));
-}
-
-#[derive(Component, Clone, Copy)]
-pub struct HandInputMethodData(Hand);
-impl HandInputMethodData {
-    pub const fn new() -> HandInputMethodData {
-        HandInputMethodData(Hand::empty())
-    }
-
-    pub fn set_in_global_space(&mut self, hand: Hand) {
-        self.0 = hand;
-    }
-
-    pub fn get_in_relative_space(&self, relative_to: &GlobalTransform) -> Hand {
-        let mat = &relative_to.compute_matrix().inverse();
-        Hand {
-            thumb: Thumb {
-                tip: mul_joint(mat, self.0.thumb.tip),
-                distal: mul_joint(mat, self.0.thumb.distal),
-                proximal: mul_joint(mat, self.0.thumb.proximal),
-                metacarpal: mul_joint(mat, self.0.thumb.metacarpal),
-            },
-            index: Finger {
-                tip: mul_joint(mat, self.0.index.tip),
-                distal: mul_joint(mat, self.0.index.distal),
-                proximal: mul_joint(mat, self.0.index.proximal),
-                intermediate: mul_joint(mat, self.0.index.intermediate),
-                metacarpal: mul_joint(mat, self.0.index.metacarpal),
-            },
-            middle: Finger {
-                tip: mul_joint(mat, self.0.middle.tip),
-                distal: mul_joint(mat, self.0.middle.distal),
-                proximal: mul_joint(mat, self.0.middle.proximal),
-                intermediate: mul_joint(mat, self.0.middle.intermediate),
-                metacarpal: mul_joint(mat, self.0.middle.metacarpal),
-            },
-            ring: Finger {
-                tip: mul_joint(mat, self.0.ring.tip),
-                distal: mul_joint(mat, self.0.ring.distal),
-                proximal: mul_joint(mat, self.0.ring.proximal),
-                intermediate: mul_joint(mat, self.0.ring.intermediate),
-                metacarpal: mul_joint(mat, self.0.ring.metacarpal),
-            },
-            little: Finger {
-                tip: mul_joint(mat, self.0.little.tip),
-                distal: mul_joint(mat, self.0.little.distal),
-                proximal: mul_joint(mat, self.0.little.proximal),
-                intermediate: mul_joint(mat, self.0.little.intermediate),
-                metacarpal: mul_joint(mat, self.0.little.metacarpal),
-            },
-        }
-    }
-}
-
-fn mul_joint(mat: &Mat4, joint: Joint) -> Joint {
-    Joint {
-        pos: mat.transform_point(joint.pos),
-        ori: mat.to_scale_rotation_translation().1 * joint.ori,
-        radius: joint.radius,
-    }
-}
-
-impl Default for HandInputMethodData {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 #[derive(Clone, Copy, Component, Debug)]
@@ -193,20 +151,7 @@ pub enum HandSide {
 #[derive(Clone, Copy, Component, Debug)]
 pub struct SuisInputXrHand;
 
-#[derive(Clone, Copy, Debug)]
-pub struct Joint {
-    pub pos: Vec3,
-    pub ori: Quat,
-    pub radius: f32,
-}
 impl Joint {
-    const fn empty() -> Self {
-        Self {
-            pos: Vec3::ZERO,
-            ori: Quat::IDENTITY,
-            radius: 0.0,
-        }
-    }
     fn from_data((transform, radius): (&GlobalTransform, &HandBoneRadius)) -> Self {
         let (_, rot, pos) = transform.to_scale_rotation_translation();
         Self {
@@ -214,78 +159,6 @@ impl Joint {
             ori: rot,
             radius: radius.0,
         }
-    }
-}
-#[derive(Clone, Copy, Debug)]
-pub struct Finger {
-    pub tip: Joint,
-    pub distal: Joint,
-    pub proximal: Joint,
-    pub intermediate: Joint,
-    pub metacarpal: Joint,
-}
-impl Finger {
-    const fn empty() -> Self {
-        Self {
-            tip: Joint::empty(),
-            distal: Joint::empty(),
-            proximal: Joint::empty(),
-            intermediate: Joint::empty(),
-            metacarpal: Joint::empty(),
-        }
-    }
-}
-#[derive(Clone, Copy, Debug)]
-pub struct Thumb {
-    pub tip: Joint,
-    pub distal: Joint,
-    pub proximal: Joint,
-    pub metacarpal: Joint,
-}
-impl Thumb {
-    const fn empty() -> Self {
-        Self {
-            tip: Joint::empty(),
-            distal: Joint::empty(),
-            proximal: Joint::empty(),
-            metacarpal: Joint::empty(),
-        }
-    }
-}
-#[derive(Clone, Copy, Debug)]
-pub struct Hand {
-    pub thumb: Thumb,
-    pub index: Finger,
-    pub middle: Finger,
-    pub ring: Finger,
-    pub little: Finger,
-}
-
-impl Hand {
-    pub fn pinch(&self) -> f32 {
-        self.pinch_between(&self.thumb.tip, &self.index.tip)
-    }
-
-    pub fn grab(&self) -> f32 {
-        self.pinch_between(&self.ring.tip, &self.ring.metacarpal)
-    }
-
-    pub fn pinch_between<'a>(&'a self, joint_1: &'a Joint, joint_2: &'a Joint) -> f32 {
-        const PINCH_MAX: f32 = 0.11;
-        const PINCH_ACTIVACTION_DISTANCE: f32 = 0.01;
-        self.pinch_between_with_params(joint_1, joint_2, PINCH_ACTIVACTION_DISTANCE, PINCH_MAX)
-    }
-    pub fn pinch_between_with_params<'a>(
-        &'a self,
-        joint_1: &'a Joint,
-        joint_2: &'a Joint,
-        activation_distance: f32,
-        pinch_max: f32,
-    ) -> f32 {
-        let combined_radius = joint_1.radius + joint_2.radius;
-        let pinch_dist = joint_1.pos.distance(joint_2.pos) - combined_radius;
-        (1.0 - ((pinch_dist - activation_distance) / (pinch_max - activation_distance)))
-            .clamp(0.0, 1.0)
     }
 }
 
@@ -326,15 +199,8 @@ impl Hand {
                 intermediate: Joint::from_data(data[HandBone::LittleIntermediate as usize]),
                 metacarpal: Joint::from_data(data[HandBone::LittleMetacarpal as usize]),
             },
-        }
-    }
-    pub const fn empty() -> Hand {
-        Hand {
-            thumb: Thumb::empty(),
-            index: Finger::empty(),
-            middle: Finger::empty(),
-            ring: Finger::empty(),
-            little: Finger::empty(),
+            palm: Joint::from_data(data[HandBone::Palm as usize]),
+            wrist: Joint::from_data(data[HandBone::Wrist as usize]),
         }
     }
 }

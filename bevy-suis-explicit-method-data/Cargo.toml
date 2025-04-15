@@ -1,0 +1,9 @@
+[package]
+name = "bevy-suis-explicit-method-data"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.14"
+schminput = { version = "0.1.0", features = ["xr"] }
+bevy-suis.path = ".."

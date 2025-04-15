@@ -6,18 +6,17 @@ use bevy_mod_xr::{
 };
 use bevy_suis::{
     debug::SuisDebugGizmosPlugin,
-    window_pointers::{MouseInputMethodData, SuisWindowPointerPlugin},
-    xr::{Hand, HandInputMethodData, SuisXrPlugin},
+    input_method_data::InputMethodData,
+    window_pointers::SuisWindowPointerPlugin,
+    xr::SuisXrPlugin,
     xr_controllers::{
         default_bindings::SuisXrControllerDefaultBindingsPlugin,
         interaction_profiles::SupportedInteractionProfiles, SuisXrControllerPlugin,
-        XrControllerInputMethodData,
     },
     CaptureContext, Field, InputHandler, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
 };
 use bevy_xr_utils::hand_gizmos::HandGizmosPlugin;
 use openxr::ReferenceSpaceType;
-use schminput::ActionBundle;
 
 // TODO: improve capturing mechanism
 fn main() -> AppExit {
@@ -68,19 +67,14 @@ fn move_grabble(
         ),
         With<Grabble>,
     >,
-    method_query: Query<(
-        &GlobalTransform,
-        Option<&HandInputMethodData>,
-        Option<&XrControllerInputMethodData>,
-        Option<&MouseInputMethodData>,
-    )>,
+    method_query: Query<(&GlobalTransform, &InputMethodData, Has<PointerInputMethod>)>,
     parent_query: Query<&GlobalTransform>,
     mut cmds: Commands,
 ) {
     for (handler_entity, handler, handler_gt, mut handler_transform, grabbed, parent) in
         &mut grabbles
     {
-        let Some((method_transform, hand_data, controller_data, mouse_data)) = handler
+        let Some((method_transform, data, ranged)) = handler
             .captured_methods
             .first()
             .copied()
@@ -89,17 +83,7 @@ fn move_grabble(
             cmds.entity(handler_entity).remove::<Grabbed>();
             continue;
         };
-        let mut grabbing = false;
-        if let Some(hand) = hand_data {
-            let hand = hand.get_in_relative_space(handler_gt);
-            grabbing |= finger_separation(&hand, GRAB_SEPARATION);
-        }
-        if let Some(controller) = controller_data {
-            grabbing |= controller.squeeze.squeezed;
-        }
-        if let Some(mouse) = mouse_data.as_ref() {
-            grabbing |= mouse.left_button.pressed;
-        }
+        let grabbing = data.grab > 0.8;
         match (grabbed.is_some(), grabbing) {
             (false, true) => {
                 cmds.entity(handler_entity)
@@ -117,18 +101,15 @@ fn move_grabble(
                 .and_then(|v| parent_query.get(v.get()).ok())
                 .copied()
                 .unwrap_or(GlobalTransform::IDENTITY);
-            if let Some(mouse) = mouse_data {
-                t.0.translation.z += mouse.discrete_scroll.y * 0.1;
+            if ranged {
+                t.0.translation.z -= data.scroll.unwrap_or_default().y;
             }
-
             *handler_transform = Transform::from_matrix(
                 method_transform.mul_transform(t.0).compute_matrix() * w.compute_matrix().inverse(),
             );
         }
     }
 }
-
-const GRAB_SEPARATION: f32 = 0.005;
 
 #[derive(Component)]
 struct Cam;
@@ -165,12 +146,7 @@ fn setup(mut cmds: Commands) {
 
 fn capture_condition(
     ctx: In<CaptureContext>,
-    query: Query<(
-        Option<&HandInputMethodData>,
-        Has<PointerInputMethod>,
-        Option<&MouseInputMethodData>,
-        Option<&XrControllerInputMethodData>,
-    )>,
+    query: Query<&InputMethodData>,
     handler_query: Query<&InputHandlerCaptures>,
 ) -> bool {
     // Only Capture one method
@@ -181,41 +157,11 @@ fn capture_condition(
         return false;
     }
 
-    let mut capture = ctx.distance < 0.0;
-    let Ok((hand_data, is_pointer, mouse_data, controller_data)) = query.get(ctx.input_method)
-    else {
-        return capture;
+    let Ok(data) = query.get(ctx.input_method) else {
+        return false;
     };
-    if let Some(hand_data) = hand_data {
-        let hand = hand_data.get_in_relative_space(&ctx.handler_location);
-        if ctx.distance < 0.1 {
-            capture |= finger_separation(&hand, GRAB_SEPARATION * 1.5);
-        }
+    if ctx.distance <= 0.01 {
+        return data.grab > 0.8;
     }
-    if capture {
-        let mut grabbing = false;
-        if let Some(hand) = hand_data {
-            let hand = hand.get_in_relative_space(&ctx.handler_location);
-            grabbing |= finger_separation(&hand, GRAB_SEPARATION);
-        }
-        if let Some(controller) = controller_data {
-            grabbing |= controller.squeeze.squeezed;
-        }
-        if let Some(mouse) = mouse_data {
-            grabbing |= mouse.left_button.pressed;
-        }
-        return grabbing;
-    }
-    if is_pointer {
-        if let Some(mouse) = mouse_data {
-            return mouse.left_button.pressed;
-        }
-        return true;
-    }
-    capture
-}
-
-fn finger_separation(hand: &Hand, max_seperation: f32) -> bool {
-    hand.thumb.tip.pos.distance(hand.index.tip.pos)
-        < hand.index.tip.radius + hand.thumb.tip.radius + max_seperation
+    false
 }
