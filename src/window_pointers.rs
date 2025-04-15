@@ -21,9 +21,9 @@ impl Plugin for SuisWindowPointerPlugin {
                 .in_set(SuisPreUpdateSets::UpdateInputMethods),
         );
         app.add_systems(PreStartup, manually_spawn_methods);
-        app.observe(spawn_input_methods);
-        app.observe(despawn_input_methods);
-        app.observe(despawn_input_method_on_ref_remove);
+        app.add_observer(spawn_input_methods);
+        app.add_observer(despawn_input_methods);
+        app.add_observer(despawn_input_method_on_ref_remove);
     }
 }
 
@@ -40,10 +40,9 @@ fn spawn_method_on_entity(cmds: &mut Commands, e: Entity) {
     let method = cmds
         .spawn((
             InputMethod::new(),
-            PointerInputMethod(Ray3d::new(Vec3::ZERO, Vec3::NEG_Z)),
+            PointerInputMethod(Ray3d::new(Vec3::ZERO, Dir3::NEG_Z)),
             MouseInputMethod,
             InputMethodData::default(),
-            SpatialBundle::default(),
         ))
         .id();
     cmds.entity(e).insert(SuisWindowCursor(method));
@@ -182,10 +181,10 @@ fn update_input_method_ray(
         if let Some(pos) = window.cursor_position() {
             active.0 = true;
             if let Some(pos) = get_viewport_pos(pos, camera) {
-                if let Some(ray) = camera.viewport_to_world(cam_transform, pos) {
+                if let Ok(ray) = camera.viewport_to_world(cam_transform, pos) {
                     method.0 = ray;
                     transform.translation = ray.origin;
-                    transform.look_at(ray.origin + *ray.direction, Dir3::Y);
+                    transform.look_at(ray.origin + *ray.direction, cam_transform.up());
                 }
             }
         } else {

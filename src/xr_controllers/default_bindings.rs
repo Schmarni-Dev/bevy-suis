@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use schminput::{prelude::RequestedSubactionPaths, ActionSetBundle};
+use schminput::{prelude::RequestedSubactionPaths, ActionSet};
 
 use super::interaction_profiles::SupportedInteractionProfiles;
 
@@ -30,15 +30,17 @@ fn create_bindings(
     // mut paths: ResMut<SubactionPaths>,
 ) {
     let set_left = cmds
-        .spawn(ActionSetBundle::new(
+        .spawn(ActionSet::new(
             "suis_xr_input_set_left",
             "Spatial Universal Interaction System XR Input Sources: Left Hand",
+            u32::MAX,
         ))
         .id();
     let set_right = cmds
-        .spawn(ActionSetBundle::new(
+        .spawn(ActionSet::new(
             "suis_xr_input_set_right",
             "Spatial Universal Interaction System XR Input Sources: Right Hand",
+            u32::MAX,
         ))
         .id();
     let req_paths = RequestedSubactionPaths::default();
@@ -77,9 +79,10 @@ mod tests {
         let mut cmds = Commands::new(&mut queue, &world);
 
         let set_left = cmds
-            .spawn(ActionSetBundle::new(
+            .spawn(ActionSet::new(
                 "suis_xr_input_set_left",
                 "Spatial Universal Interaction System XR Input Sources: Left Hand",
+                0,
             ))
             .id();
         let bindings_left = binding_gen::spawn_bindings_left(
@@ -89,9 +92,10 @@ mod tests {
             &RequestedSubactionPaths::default(),
         );
         let set_right = cmds
-            .spawn(ActionSetBundle::new(
+            .spawn(ActionSet::new(
                 "suis_xr_input_set_right",
                 "Spatial Universal Interaction System XR Input Sources: Right Hand",
+                0,
             ))
             .id();
         let bindings_right = binding_gen::spawn_bindings_right(
@@ -106,7 +110,7 @@ mod tests {
                 .enumerate()
                 .flat_map(|(i, v)| {
                     let field_name = bindings.name_at(i).unwrap_or("NONE").to_string();
-                    if v.is::<Entity>() {
+                    if v.try_downcast_ref::<Entity>().is_some() {
                         return vec![(field_name, v)];
                     }
                     println!("{}", v.reflect_type_path());
@@ -128,7 +132,7 @@ mod tests {
                     v
                 })
                 .any(|v| {
-                    v.downcast_ref::<Entity>()
+                    v.try_downcast_ref::<Entity>()
                         .is_none_or(|v| *v == Entity::PLACEHOLDER)
                 })
         }
@@ -144,8 +148,8 @@ mod binding_gen {
         gen_bindings, xr_controllers::interaction_profiles::SupportedInteractionProfile as Profile,
     };
     use schminput::{
-        openxr::OxrActionBlueprint, xr::SpaceActionValue as Space, ActionBundle,
-        F32ActionValue as F32, Vec2ActionValue as Vec2,
+        openxr::OxrBindings, xr::SpaceActionValue as Space, Action, F32ActionValue as F32,
+        Vec2ActionValue as Vec2,
     };
 
     use super::XrControllerInputActions;
@@ -373,7 +377,7 @@ macro_rules! gen_bindings {
         pub fn $fn_name(set: bevy::prelude::Entity, cmds: &mut bevy::prelude::Commands, profiles: &SupportedInteractionProfiles, paths: &RequestedSubactionPaths) -> XrControllerInputActions {
             let mut entities = make_placeholder_action_struct();
             $(
-                let mut blueprint = OxrActionBlueprint::default();
+                let mut blueprint = OxrBindings::default();
                 $(
                 if profiles.contains(&$profile) {
                     blueprint = blueprint.interaction_profile($profile.get_path())
@@ -383,10 +387,8 @@ macro_rules! gen_bindings {
                 )*
                 let action_name = stringify!($($action).+).replace(".", "_");
                 entities.$($action).+ = cmds.spawn((
-                    ActionBundle {
-                        paths: paths.clone(),
-                        ..ActionBundle::new(action_name, $action_localized, set)
-                    },
+                    Action::new(action_name, $action_localized, set),
+                    paths.clone(),
                     blueprint,
                     <$type>::default(),
                 )).id();

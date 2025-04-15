@@ -6,7 +6,9 @@ use crate::{
 use bevy::prelude::*;
 use bevy_mod_openxr::spaces::OxrSpaceLocationFlags;
 use bevy_mod_xr::{
-    hands::{HandBone, HandBoneRadius, LeftHand, RightHand, XrHandBoneEntities, HAND_JOINT_COUNT},
+    hands::{
+        HandBone, LeftHand, RightHand, XrHandBoneEntities, XrHandBoneRadius, HAND_JOINT_COUNT,
+    },
     session::{XrPreDestroySession, XrSessionCreated, XrTrackingRoot},
     spaces::XrSpaceLocationFlags,
 };
@@ -35,7 +37,7 @@ fn update_hand_input_methods(
         (With<InputMethod>, With<HandInputMethod>),
     >,
     flag_query: Query<&XrSpaceLocationFlags>,
-    xr_hand_joint_query: Query<(&GlobalTransform, &HandBoneRadius)>,
+    xr_hand_joint_query: Query<(&GlobalTransform, &XrHandBoneRadius)>,
 ) {
     for (mut method_data, mut method_transform, joint_entities, mut active) in
         &mut hand_method_query
@@ -108,21 +110,19 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
             OxrSpaceLocationFlags(openxr::SpaceLocationFlags::EMPTY),
         )
     });
-    cmds.entity(root).push_children(&left_bones);
-    cmds.entity(root).push_children(&right_bones);
-    cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
+    cmds.entity(root).add_children(&left_bones);
+    cmds.entity(root).add_children(&right_bones);
+    cmds.queue(bevy_mod_xr::hands::SpawnHandTracker {
         joints: XrHandBoneEntities(left_bones),
         tracker_bundle: SuisInputXrHand,
         side: HandSide::Left,
     });
-    cmds.push(bevy_mod_xr::hands::SpawnHandTracker {
+    cmds.queue(bevy_mod_xr::hands::SpawnHandTracker {
         joints: XrHandBoneEntities(right_bones),
         tracker_bundle: SuisInputXrHand,
         side: HandSide::Right,
     });
     cmds.spawn((
-        SpatialBundle::default(),
-        InputMethodData::default(),
         InputMethod::new(),
         HandInputMethod,
         SuisXrHandJoints(left_bones),
@@ -130,7 +130,6 @@ fn spawn_input_hands(mut cmds: Commands, root: Query<Entity, With<XrTrackingRoot
         HandSide::Left,
     ));
     cmds.spawn((
-        SpatialBundle::default(),
         InputMethod::new(),
         InputMethodData::default(),
         HandInputMethod,
@@ -152,7 +151,7 @@ pub enum HandSide {
 pub struct SuisInputXrHand;
 
 impl Joint {
-    fn from_data((transform, radius): (&GlobalTransform, &HandBoneRadius)) -> Self {
+    fn from_data((transform, radius): (&GlobalTransform, &XrHandBoneRadius)) -> Self {
         let (_, rot, pos) = transform.to_scale_rotation_translation();
         Self {
             pos,
@@ -163,7 +162,7 @@ impl Joint {
 }
 
 impl Hand {
-    pub fn from_data(data: &[(&GlobalTransform, &HandBoneRadius); HAND_JOINT_COUNT]) -> Hand {
+    pub fn from_data(data: &[(&GlobalTransform, &XrHandBoneRadius); HAND_JOINT_COUNT]) -> Hand {
         Hand {
             thumb: Thumb {
                 tip: Joint::from_data(data[HandBone::ThumbTip as usize]),

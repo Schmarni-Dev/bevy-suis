@@ -30,7 +30,7 @@ fn draw_method_gizmos(
         } else {
             let t = transform.compute_transform();
             let base = t.with_translation(transform.transform_point(Vec3::Z * 0.02));
-            gizmos.circle(base.translation, t.forward(), 0.01, color);
+            gizmos.circle(base.to_isometry(), 0.01, color);
             gizmos.line(base.transform_point(Vec3::X * 0.01), t.translation, color);
             gizmos.line(base.transform_point(Vec3::X * -0.01), t.translation, color);
             gizmos.line(base.transform_point(Vec3::Y * 0.01), t.translation, color);
@@ -40,16 +40,13 @@ fn draw_method_gizmos(
 }
 
 fn draw_fields(field_query: Query<(&GlobalTransform, &Field)>, mut gizmos: Gizmos) {
-    for field in &field_query {
-        let (_, field_rot, field_pos) = field.0.to_scale_rotation_translation();
-        match field.1 {
+    for (transform, field) in &field_query {
+        match field {
             Field::Sphere(r) => {
-                gizmos.sphere(field_pos, field_rot, *r, css::LIME);
+                gizmos.sphere(transform.to_isometry(), *r, css::LIME);
             }
             Field::Cuboid(cuboid) => gizmos.cuboid(
-                field
-                    .0
-                    .mul_transform(Transform::from_scale(cuboid.half_size * 2.0)),
+                transform.mul_transform(Transform::from_scale(cuboid.half_size * 2.0)),
                 css::LIME,
             ),
         }

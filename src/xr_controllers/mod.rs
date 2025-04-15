@@ -94,7 +94,7 @@ fn update_method_data(
                     .get(actions.scroll_continuous)
                     .map(|v| v.any)
                     .unwrap_or_default()
-                    * time.delta_seconds()
+                    * time.delta_secs()
                     * 2.0)
                     + {
                         let delta = vec2
@@ -159,7 +159,6 @@ fn setup(
         .spawn((
             SuisXrControllerInputMethod,
             InputMethodData::default(),
-            SpatialBundle::default(),
             HandSide::Left,
             LeftHand,
         ))
@@ -168,7 +167,6 @@ fn setup(
         .spawn((
             SuisXrControllerInputMethod,
             InputMethodData::default(),
-            SpatialBundle::default(),
             HandSide::Right,
             RightHand,
         ))
