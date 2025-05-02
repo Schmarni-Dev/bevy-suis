@@ -7,7 +7,7 @@ use bevy::{
 use crate::{
     SuisPreUpdateSets,
     field::Field,
-    input_handler::InputHandler,
+    input_handler::{FieldRef, InputHandler},
     input_method::InputMethod,
     input_method_data::{InputData, NonSpatialInputData, SpatialInputData},
 };
@@ -43,32 +43,99 @@ fn send_input_data(
         &GlobalTransform,
         &SpatialInputData,
     )>,
-    handlers: Query<(&GlobalTransform, &Field), With<InputHandler>>,
+    mut handlers: Query<(Entity, &GlobalTransform, &mut InputHandler)>,
+    field_query: Query<(&Field, &GlobalTransform)>,
 ) {
     let mut handler_data = EntityHashMap::<Vec<InputData>>::default();
     for (input_method, method, data, method_transform, input) in &methods {
         if let Some(handler) = method.captured_by {
-            let Ok((handler_transform, handler_field)) = handlers
+            let Ok((handler, handler_transform, input_handler)) = handlers
                 .get(handler)
                 .inspect_err(|err| error!("Invalid InputHandler Capturing InputMethod: {err}"))
             else {
                 continue;
             };
-            let global_to_handler = handler_transform.compute_matrix().inverse();
-            let method_relative_transform = Transform::from_matrix(
-                global_to_handler.mul_mat4(&method_transform.compute_matrix()),
-            );
-            handler_data.entry(handler).or_default().push(InputData {
-                input_method,
-                input: input.transform(&global_to_handler),
-                minimal_non_spatial_data: *data,
-                handler_location: *handler_transform,
-                input_method_location: method_relative_transform.to_isometry(),
-                distance: input.distance(handler_field, handler_transform),
-                captured: true,
-            });
+            let Some(data) = get_data_for_handler(
+                handler,
+                method_transform,
+                handler_transform,
+                input_handler,
+                field_query,
+                |global_to_handler, input_method_location, field, field_transform| InputData {
+                    input_method,
+                    input: input.transform(&global_to_handler),
+                    minimal_non_spatial_data: *data,
+                    handler_location: *handler_transform,
+                    input_method_location,
+                    distance: input.distance(field, field_transform),
+                    captured: true,
+                },
+            ) else {
+                continue;
+            };
+            handler_data.entry(handler).or_default().push(data);
+        } else {
+            for (handler, handler_transform, input_handler) in &handlers {
+                let Some(data) = get_data_for_handler(
+                    handler,
+                    method_transform,
+                    handler_transform,
+                    input_handler,
+                    field_query,
+                    |global_to_handler, input_method_location, field, field_transform| InputData {
+                        input_method,
+                        input: input.transform(&global_to_handler),
+                        minimal_non_spatial_data: *data,
+                        handler_location: *handler_transform,
+                        input_method_location,
+                        distance: input.distance(field, field_transform),
+                        captured: true,
+                    },
+                ) else {
+                    continue;
+                };
+                handler_data.entry(handler).or_default().push(data);
+            }
         }
     }
+    for (handler, data) in handler_data.into_iter() {
+        let Ok((_, _, mut input_handler)) = handlers
+            .get_mut(handler)
+            .inspect_err(|err| error!("Handler somehow not valid: {err}"))
+        else {
+            continue;
+        };
+        input_handler.set_events(data);
+    }
+}
+
+fn get_data_for_handler(
+    handler: Entity,
+    method_transform: &GlobalTransform,
+    handler_transform: &GlobalTransform,
+    input_handler: &InputHandler,
+    field_query: Query<(&Field, &GlobalTransform)>,
+    creation_fn: impl FnOnce(Mat4, Isometry3d, &Field, &GlobalTransform) -> InputData,
+) -> Option<InputData> {
+    let global_to_handler = handler_transform.compute_matrix().inverse();
+    let method_relative_transform =
+        Transform::from_matrix(global_to_handler.mul_mat4(&method_transform.compute_matrix()));
+    let field_entity = match input_handler.get_field_ref() {
+        FieldRef::This => handler,
+        FieldRef::Entity(entity) => entity,
+    };
+    let Ok((field, field_transform)) = field_query
+        .get(field_entity)
+        .inspect_err(|err| error!("Invalid Field: {err}"))
+    else {
+        return None;
+    };
+    Some(creation_fn(
+        global_to_handler,
+        method_relative_transform.to_isometry(),
+        field,
+        field_transform,
+    ))
 }
 
 fn capture_input_methods(

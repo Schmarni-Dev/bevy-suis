@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use bevy::prelude::*;
 use bevy_mod_xr::{
     hands::{
@@ -10,11 +12,10 @@ use bevy_mod_xr::{
 
 use crate::{
     InputMethodDisabled, SuisPreUpdateSets,
-    field::Field,
     hand::{Finger, Hand, Joint, Thumb},
-    input_handler::InputHandler,
     input_method::InputMethod,
     input_method_data::{NonSpatialInputData, SpatialInputData},
+    order_helper::InputHandlerQueryHelper,
     update_input_method_disabled,
 };
 pub struct SuisBundledXrHandsInputMethodPlugin;
@@ -67,7 +68,7 @@ fn update_data(
         With<SuisBundledXrHandInputMethod>,
     >,
     joint_query: Query<(&GlobalTransform, &XrHandBoneRadius)>,
-    handler_query: Query<(Entity, &GlobalTransform, &Field), With<InputHandler>>,
+    handler_query: InputHandlerQueryHelper,
 ) {
     for (mut input_method, mut spatial_data, mut non_spatial_data, joints) in &mut query {
         let Ok(joint_data) = joint_query.get_many(joints.0) else {
@@ -89,14 +90,12 @@ fn update_data(
         );
         *spatial_data = SpatialInputData::Hand(hand);
 
-        let mut handlers = handler_query
-            .iter()
-            .map(|(entity, field_transform, field)| {
-                (entity, spatial_data.distance(field, field_transform))
-            })
-            .filter(|(_, distance)| distance.is_finite())
-            .collect::<Vec<_>>();
-        handlers.sort_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap());
+        let mut handlers =
+            handler_query.query_all_handler_fields(|(handler, field, field_transform)| {
+                (handler, spatial_data.distance(field, field_transform))
+            });
+
+        handlers.sort_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap_or(Ordering::Equal));
         let handlers = handlers.into_iter().map(|(e, _)| e).collect();
         input_method.set_handler_order(handlers);
     }

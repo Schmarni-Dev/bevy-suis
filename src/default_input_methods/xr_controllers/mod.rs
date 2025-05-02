@@ -1,6 +1,8 @@
 pub mod default_bindings;
 pub mod interaction_profiles;
 
+use std::cmp::Ordering;
+
 use default_bindings::{
     SuisXrControllerActions, SuisXrControllerBindingSet, XrControllerInputActions,
 };
@@ -8,7 +10,7 @@ use default_bindings::{
 use bevy::prelude::*;
 use bevy_mod_xr::{
     hands::{HandSide, LeftHand, RightHand},
-    session::{XrPreDestroySession, XrSessionCreated, XrState, XrTrackingRoot},
+    session::{XrPreDestroySession, XrSessionCreated, XrState},
     spaces::{XrSpaceLocationFlags, XrSpaceSyncSet},
 };
 use schminput::openxr::OxrInputPlugin;
@@ -16,13 +18,16 @@ use schminput::xr::AttachSpaceToEntity;
 use schminput::{SchminputPlugin, SchminputSet, prelude::*};
 
 use crate::{
-    InputMethodDisabled, input_method::InputMethod, input_method_data::NonSpatialInputData,
+    InputMethodDisabled,
+    input_method::InputMethod,
+    input_method_data::{NonSpatialInputData, SpatialInputData},
+    order_helper::InputHandlerQueryHelper,
     update_input_method_disabled,
 };
 
-pub struct SuisXrControllerPlugin;
+pub struct SuisBundledXrControllerInputMethodPlugin;
 
-impl Plugin for SuisXrControllerPlugin {
+impl Plugin for SuisBundledXrControllerInputMethodPlugin {
     fn build(&self, app: &mut App) {
         if *app.world().resource::<XrState>() == XrState::Unavailable {
             return;
@@ -37,11 +42,31 @@ impl Plugin for SuisXrControllerPlugin {
         app.add_systems(Startup, setup.after(SuisXrControllerBindingSet));
         app.add_systems(
             PreUpdate,
-            (update_method_state, update_method_data)
+            (
+                update_method_state,
+                update_method_data,
+                update_handler_order,
+            )
+                .chain()
                 .after(SchminputSet::SyncInputActions)
                 .after(XrSpaceSyncSet)
                 .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
         );
+    }
+}
+
+fn update_handler_order(
+    mut query: Query<(&mut InputMethod, &SpatialInputData), With<SuisXrControllerInputMethod>>,
+    handler_query: InputHandlerQueryHelper,
+) {
+    for (mut method, spatial_data) in &mut query {
+        let mut handlers =
+            handler_query.query_all_handler_fields(|(handler, field, field_transform)| {
+                (handler, spatial_data.distance(field, field_transform))
+            });
+        handlers.sort_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap_or(Ordering::Equal));
+        let handlers = handlers.into_iter().map(|(e, _)| e).collect();
+        method.set_handler_order(handlers);
     }
 }
 
@@ -67,7 +92,12 @@ fn update_method_data(
     f32: Query<&F32ActionValue>,
     actions: Res<SuisXrControllerActions>,
     mut method_query: Query<
-        (&mut NonSpatialInputData, &HandSide),
+        (
+            &mut NonSpatialInputData,
+            &mut SpatialInputData,
+            &HandSide,
+            &GlobalTransform,
+        ),
         (With<InputMethod>, With<SuisXrControllerInputMethod>),
     >,
     mut last_delta_scroll: Local<(Vec2, Vec2)>,
@@ -130,34 +160,43 @@ fn update_method_data(
         &mut last_delta_scroll.1,
         &time,
     );
-    for (mut data, side) in &mut method_query {
-        *data = match side {
+    for (mut non_spatial_data, mut spatial_data, side, transform) in &mut method_query {
+        *non_spatial_data = match side {
             HandSide::Left => action_data_left,
             HandSide::Right => action_data_right,
         };
+        *spatial_data = match *spatial_data {
+            SpatialInputData::Hand(_) | SpatialInputData::Tip(_) => {
+                SpatialInputData::Tip(transform.to_isometry())
+            }
+            SpatialInputData::Ray(_) => {
+                let (_, rot, pos) = transform.to_scale_rotation_translation();
+                SpatialInputData::Ray(Ray3d::new(pos, rot * Dir3::NEG_Z))
+            }
+        }
     }
 }
 
 #[derive(Default, Component)]
 struct SuisXrControllerInputMethod;
 
-fn setup(
-    mut cmds: Commands,
-    root: Query<Entity, With<XrTrackingRoot>>,
-    action: Res<SuisXrControllerActions>,
-) {
+fn setup(mut cmds: Commands, action: Res<SuisXrControllerActions>) {
     let method_left = cmds
         .spawn((
-            SuisXrControllerInputMethod,
+            InputMethod::default(),
             NonSpatialInputData::default(),
+            SpatialInputData::Tip(Isometry3d::IDENTITY),
+            SuisXrControllerInputMethod,
             HandSide::Left,
             LeftHand,
         ))
         .id();
     let method_right = cmds
         .spawn((
-            SuisXrControllerInputMethod,
+            InputMethod::default(),
             NonSpatialInputData::default(),
+            SpatialInputData::Tip(Isometry3d::IDENTITY),
+            SuisXrControllerInputMethod,
             HandSide::Right,
             RightHand,
         ))
@@ -166,9 +205,6 @@ fn setup(
         .insert(AttachSpaceToEntity(method_left));
     cmds.entity(action.actions_right.pose)
         .insert(AttachSpaceToEntity(method_right));
-    cmds.entity(root.single().unwrap())
-        .add_child(method_left)
-        .add_child(method_right);
 }
 
 fn despawn_input_methods(
