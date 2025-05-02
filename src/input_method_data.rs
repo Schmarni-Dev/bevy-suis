@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{hand::Hand, Field};
+use crate::{field::Field, hand::Hand};
 
 #[derive(Clone, Copy, Component, Debug, Reflect, Default)]
 pub struct NonSpatialInputData {
@@ -15,21 +15,28 @@ pub struct NonSpatialInputData {
 }
 
 #[derive(Clone, Copy, Component, Debug, Reflect)]
-pub enum InputType {
+#[expect(clippy::large_enum_variant)]
+pub enum SpatialInputData {
     Hand(Hand),
     Tip(Isometry3d),
     Ray(Ray3d),
 }
 
-impl InputType {
+impl Default for SpatialInputData {
+    fn default() -> Self {
+        Self::Tip(Isometry3d::IDENTITY)
+    }
+}
+
+impl SpatialInputData {
     pub fn transform(self, mat: &Mat4) -> Self {
         match self {
-            InputType::Hand(hand) => InputType::Hand(hand.transform(mat)),
-            InputType::Tip(isometry) => InputType::Tip(Isometry3d {
+            SpatialInputData::Hand(hand) => SpatialInputData::Hand(hand.transform(mat)),
+            SpatialInputData::Tip(isometry) => SpatialInputData::Tip(Isometry3d {
                 rotation: mat.to_scale_rotation_translation().1 * isometry.rotation,
                 translation: mat.transform_point3a(isometry.translation),
             }),
-            InputType::Ray(ray) => InputType::Ray(Ray3d {
+            SpatialInputData::Ray(ray) => SpatialInputData::Ray(Ray3d {
                 origin: mat.transform_point3(ray.origin),
                 direction: Dir3::new_unchecked(mat.transform_vector3(ray.direction.as_vec3())),
             }),
@@ -37,9 +44,11 @@ impl InputType {
     }
     pub fn distance(&self, field: &Field, field_transform: &GlobalTransform) -> f32 {
         match self {
-            InputType::Hand(hand) => hand.distance(field, field_transform),
-            InputType::Tip(isometry) => field.distance(field_transform, isometry.translation),
-            InputType::Ray(ray) => field.raymarch(field_transform, *ray).closest_distance,
+            SpatialInputData::Hand(hand) => hand.distance(field, field_transform),
+            SpatialInputData::Tip(isometry) => {
+                field.distance(field_transform, isometry.translation)
+            }
+            SpatialInputData::Ray(ray) => field.raymarch(field_transform, *ray).closest_distance,
         }
     }
 }
@@ -47,7 +56,7 @@ impl InputType {
 #[derive(Debug, Clone, Copy)]
 pub struct InputData {
     pub input_method: Entity,
-    pub input: InputType,
+    pub input: SpatialInputData,
     pub minimal_non_spatial_data: NonSpatialInputData,
     pub handler_location: GlobalTransform,
     pub input_method_location: Isometry3d,

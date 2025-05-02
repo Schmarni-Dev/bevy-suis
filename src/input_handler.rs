@@ -16,6 +16,9 @@ impl InputHandler {
             messages: Vec::new(),
         }
     }
+    pub fn input_events(&self) -> &[InputData] {
+        &self.input_events
+    }
     // might throw capture_requests in a mutex for better scheduling
     pub fn request_capture(&mut self, method: Entity) {
         self.messages

@@ -6,8 +6,8 @@ use bevy::{
 };
 
 use crate::{
-    input_method_data::NonSpatialInputData, InputMethod, InputMethodActive, PointerInputMethod,
-    SuisPreUpdateSets,
+    input_method_data::{SpatialInputData, NonSpatialInputData},
+    InputMethod, InputMethodActive, SuisPreUpdateSets,
 };
 
 pub struct SuisWindowPointerPlugin;
@@ -40,7 +40,7 @@ fn spawn_method_on_entity(cmds: &mut Commands, e: Entity) {
     let method = cmds
         .spawn((
             InputMethod::new(),
-            PointerInputMethod(Ray3d::new(Vec3::ZERO, Dir3::NEG_Z)),
+            SpatialInputData::Ray(Ray3d::new(Vec3::ZERO, Dir3::NEG_Z)),
             MouseInputMethod,
             NonSpatialInputData::default(),
         ))
@@ -149,11 +149,10 @@ fn update_input_method_ray(
     primary_window: Query<Entity, With<PrimaryWindow>>,
     cams: Query<(&Camera, &GlobalTransform)>,
     windows: Query<(&Window, &SuisWindowCursor)>,
-    mut input_method: Query<(
-        &mut PointerInputMethod,
-        &mut Transform,
-        &mut InputMethodActive,
-    )>,
+    mut input_method: Query<
+        (&mut SpatialInputData, &mut Transform, &mut InputMethodActive),
+        With<MouseInputMethod>,
+    >,
 ) {
     let Ok(primary_window) = primary_window.get_single() else {
         warn_once!("no primary window?");
@@ -182,7 +181,7 @@ fn update_input_method_ray(
             active.0 = true;
             if let Some(pos) = get_viewport_pos(pos, camera) {
                 if let Ok(ray) = camera.viewport_to_world(cam_transform, pos) {
-                    method.0 = ray;
+                    *method = SpatialInputData::Ray(ray);
                     transform.translation = ray.origin;
                     transform.look_at(ray.origin + *ray.direction, cam_transform.up());
                 }

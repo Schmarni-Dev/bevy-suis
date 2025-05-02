@@ -6,7 +6,7 @@ use bevy::{
 #[cfg(feature = "xr")]
 use bevy_mod_xr::hands::HandBone;
 
-use crate::Field;
+use crate::field::Field;
 
 #[derive(Clone, Copy, Debug, Reflect)]
 pub struct Joint {

@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 
+use crate::input_method_data::{NonSpatialInputData, SpatialInputData};
+
 #[derive(Component, Debug, Default)]
-#[require(Transform)]
+#[require(SpatialInputData, NonSpatialInputData)]
 pub struct InputMethod {
     pub captured_by: Option<Entity>,
     handler_order: Vec<Entity>,

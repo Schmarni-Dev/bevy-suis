@@ -1,6 +1,6 @@
 use crate::{
     hand::{Finger, Hand, Joint, Thumb},
-    input_method_data::{InputType, NonSpatialInputData},
+    input_method_data::{NonSpatialInputData, SpatialInputData},
     InputMethodActive,
 };
 use bevy::prelude::*;
@@ -33,14 +33,14 @@ fn update_hand_input_methods(
             &mut Transform,
             &SuisXrHandJoints,
             &mut InputMethodActive,
-            &mut InputType,
+            &mut SpatialInputData,
         ),
         (With<InputMethod>, With<HandInputMethod>),
     >,
     flag_query: Query<&XrSpaceLocationFlags>,
     xr_hand_joint_query: Query<(&GlobalTransform, &XrHandBoneRadius)>,
 ) {
-    for (mut method_data, mut method_transform, joint_entities, mut active,mut input) in
+    for (mut method_data, mut method_transform, joint_entities, mut active, mut input) in
         &mut hand_method_query
     {
         let Ok(joints) = xr_hand_joint_query.get_many(joint_entities.0) else {
@@ -67,7 +67,7 @@ fn update_hand_input_methods(
             HandBone::RingTip,
             &GlobalTransform::IDENTITY,
         );
-        *input = InputType::Hand(hand);
+        *input = SpatialInputData::Hand(hand);
     }
 }
 

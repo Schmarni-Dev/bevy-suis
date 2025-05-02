@@ -7,8 +7,8 @@ use bevy::{
 use crate::{
     input_handler::InputHandler,
     input_method::InputMethod,
-    input_method_data::{InputData, InputType, NonSpatialInputData},
-    Field, SuisPreUpdateSets,
+    input_method_data::{InputData, NonSpatialInputData, SpatialInputData},
+    field::Field, SuisPreUpdateSets,
 };
 pub struct InputMethodCapturingPlugin;
 
@@ -29,7 +29,7 @@ impl Plugin for InputMethodCapturingPlugin {
         );
         app.add_systems(
             PreUpdate,
-            capture_input_methods.in_set(SuisPreUpdateSets::CaptureInputMethods),
+            send_input_data.in_set(SuisPreUpdateSets::SendInputData),
         );
     }
 }
@@ -40,7 +40,7 @@ fn send_input_data(
         &InputMethod,
         &NonSpatialInputData,
         &GlobalTransform,
-        &InputType,
+        &SpatialInputData,
     )>,
     handlers: Query<(&GlobalTransform, &Field), With<InputHandler>>,
 ) {
