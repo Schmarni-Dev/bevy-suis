@@ -1,24 +1,79 @@
 use bevy::prelude::*;
 use bevy_mod_xr::{
-    hands::{spawn_hand_bones, HandSide, SpawnHandTracker, XrHandBoneEntities, HAND_JOINT_COUNT},
-    session::XrTracker,
-    spaces::XrSpaceLocationFlags,
+    hands::{
+        HAND_JOINT_COUNT, HandBone, HandSide, SpawnHandTracker, XrHandBoneEntities,
+        XrHandBoneRadius, spawn_hand_bones,
+    },
+    session::{XrSessionCreated, XrTracker},
+    spaces::{XrSpaceLocationFlags, XrSpaceSyncSet},
 };
 
 use crate::{
-    hand::Hand,
+    SuisPreUpdateSets,
+    field::Field,
+    hand::{Finger, Hand, Joint, Thumb},
+    input_handler::InputHandler,
     input_method::InputMethod,
     input_method_data::{NonSpatialInputData, SpatialInputData},
-    SuisPreUpdateSets,
 };
-pub struct SuisDefaultXrHandsInputMethodPlugin;
+pub struct SuisBundledXrHandsInputMethodPlugin;
 
-impl Plugin for SuisDefaultXrHandsInputMethodPlugin {
+impl Plugin for SuisBundledXrHandsInputMethodPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             PreUpdate,
-            update_hand_input_methods.in_set(SuisPreUpdateSets::UpdateInputMethods),
+            update_hand_input_methods
+                .in_set(SuisPreUpdateSets::UpdateInputMethods)
+                .after(XrSpaceSyncSet),
         );
+        app.add_systems(XrSessionCreated, spawn_methods);
+        app.add_systems(Startup, spawn_custom_handtracker_joints);
+    }
+}
+
+fn update_hand_input_methods(
+    mut query: Query<
+        (
+            &mut InputMethod,
+            &mut SpatialInputData,
+            &mut NonSpatialInputData,
+            &HandtrackingJoints,
+        ),
+        With<SuisBundledXrHandInputMethod>,
+    >,
+    joint_query: Query<(&GlobalTransform, &XrHandBoneRadius)>,
+    handler_query: Query<(Entity, &GlobalTransform, &Field), With<InputHandler>>,
+) {
+    for (mut input_method, mut spatial_data, mut non_spatial_data, joints) in &mut query {
+        let Ok(joint_data) = joint_query.get_many(joints.0) else {
+            warn!("unable to get joints!");
+            continue;
+        };
+        let hand = Hand::from_xr_data(&joint_data);
+        non_spatial_data.select = hand.pinch(&GlobalTransform::IDENTITY);
+        non_spatial_data.grab = hand.grab(&GlobalTransform::IDENTITY);
+        non_spatial_data.secondary = hand.pinch_between(
+            HandBone::ThumbTip,
+            HandBone::MiddleTip,
+            &GlobalTransform::IDENTITY,
+        );
+        non_spatial_data.context = hand.pinch_between(
+            HandBone::ThumbTip,
+            HandBone::RingTip,
+            &GlobalTransform::IDENTITY,
+        );
+        *spatial_data = SpatialInputData::Hand(hand);
+
+        let mut handlers = handler_query
+            .iter()
+            .map(|(entity, field_transform, field)| {
+                (entity, spatial_data.distance(field, field_transform))
+            })
+            .filter(|(_, distance)| distance.is_finite())
+            .collect::<Vec<_>>();
+        handlers.sort_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap());
+        let handlers = handlers.into_iter().map(|(e, _)| e).collect();
+        input_method.set_handler_order(handlers);
     }
 }
 
@@ -36,13 +91,13 @@ fn spawn_methods(mut cmds: Commands, joints: Res<CustomHandTrackerJoints>) {
     cmds.spawn((
         InputMethod::new(),
         SpatialInputData::Hand(Hand::empty()),
-        SuisDefaultXrHandInputMethod,
+        SuisBundledXrHandInputMethod,
         HandtrackingJoints(joints.left),
     ));
     cmds.spawn((
         InputMethod::new(),
         SpatialInputData::Hand(Hand::empty()),
-        SuisDefaultXrHandInputMethod,
+        SuisBundledXrHandInputMethod,
         HandtrackingJoints(joints.right),
     ));
 }
@@ -51,7 +106,7 @@ fn spawn_methods(mut cmds: Commands, joints: Res<CustomHandTrackerJoints>) {
 struct HandtrackingJoints([Entity; HAND_JOINT_COUNT]);
 
 #[derive(Clone, Copy, Component, Hash, Debug)]
-pub struct SuisDefaultXrHandInputMethod;
+pub struct SuisBundledXrHandInputMethod;
 
 #[derive(Resource)]
 struct CustomHandTrackerJoints {
@@ -83,12 +138,56 @@ fn spawn_custom_handtracker_joints(mut cmds: Commands) {
     });
 }
 
-fn update_hand_input_methods(
-    mut query: Query<(
-        &mut InputMethod,
-        &mut SpatialInputData,
-        &mut NonSpatialInputData,
-    )>,
-) {
-    for (input_method, spatial_data, non_spatial_data) in &mut query {}
+impl Hand {
+    pub fn from_xr_data(data: &[(&GlobalTransform, &XrHandBoneRadius); HAND_JOINT_COUNT]) -> Hand {
+        Hand {
+            thumb: Thumb {
+                tip: Joint::from_data(data[HandBone::ThumbTip as usize]),
+                distal: Joint::from_data(data[HandBone::ThumbDistal as usize]),
+                proximal: Joint::from_data(data[HandBone::ThumbProximal as usize]),
+                metacarpal: Joint::from_data(data[HandBone::ThumbMetacarpal as usize]),
+            },
+            index: Finger {
+                tip: Joint::from_data(data[HandBone::IndexTip as usize]),
+                distal: Joint::from_data(data[HandBone::IndexDistal as usize]),
+                proximal: Joint::from_data(data[HandBone::IndexProximal as usize]),
+                intermediate: Joint::from_data(data[HandBone::IndexIntermediate as usize]),
+                metacarpal: Joint::from_data(data[HandBone::IndexMetacarpal as usize]),
+            },
+            middle: Finger {
+                tip: Joint::from_data(data[HandBone::MiddleTip as usize]),
+                distal: Joint::from_data(data[HandBone::MiddleDistal as usize]),
+                proximal: Joint::from_data(data[HandBone::MiddleProximal as usize]),
+                intermediate: Joint::from_data(data[HandBone::MiddleIntermediate as usize]),
+                metacarpal: Joint::from_data(data[HandBone::MiddleMetacarpal as usize]),
+            },
+            ring: Finger {
+                tip: Joint::from_data(data[HandBone::RingTip as usize]),
+                distal: Joint::from_data(data[HandBone::RingDistal as usize]),
+                proximal: Joint::from_data(data[HandBone::RingProximal as usize]),
+                intermediate: Joint::from_data(data[HandBone::RingIntermediate as usize]),
+                metacarpal: Joint::from_data(data[HandBone::RingMetacarpal as usize]),
+            },
+            little: Finger {
+                tip: Joint::from_data(data[HandBone::LittleTip as usize]),
+                distal: Joint::from_data(data[HandBone::LittleDistal as usize]),
+                proximal: Joint::from_data(data[HandBone::LittleProximal as usize]),
+                intermediate: Joint::from_data(data[HandBone::LittleIntermediate as usize]),
+                metacarpal: Joint::from_data(data[HandBone::LittleMetacarpal as usize]),
+            },
+            palm: Joint::from_data(data[HandBone::Palm as usize]),
+            wrist: Joint::from_data(data[HandBone::Wrist as usize]),
+        }
+    }
+}
+
+impl Joint {
+    fn from_data((transform, radius): (&GlobalTransform, &XrHandBoneRadius)) -> Self {
+        let (_, rot, pos) = transform.to_scale_rotation_translation();
+        Self {
+            pos,
+            ori: rot,
+            radius: radius.0,
+        }
+    }
 }

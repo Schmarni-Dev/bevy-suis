@@ -7,7 +7,7 @@ use default_bindings::{
 
 use bevy::prelude::*;
 use bevy_mod_xr::{
-    hands::{LeftHand, RightHand},
+    hands::{HandSide, LeftHand, RightHand},
     session::{XrPreDestroySession, XrSessionCreated, XrState, XrTrackingRoot},
     spaces::{XrSpaceLocationFlags, XrSpaceSyncSet},
 };
@@ -17,7 +17,7 @@ use schminput::{SchminputPlugin, SchminputSet, prelude::*};
 
 use crate::{InputMethodActive, input_method_data::NonSpatialInputData};
 
-use crate::{InputMethod, xr::HandSide};
+use crate::InputMethod;
 
 pub struct SuisXrControllerPlugin;
 
