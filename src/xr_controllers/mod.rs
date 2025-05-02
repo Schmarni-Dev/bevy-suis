@@ -15,9 +15,10 @@ use schminput::openxr::OxrInputPlugin;
 use schminput::xr::AttachSpaceToEntity;
 use schminput::{SchminputPlugin, SchminputSet, prelude::*};
 
-use crate::{InputMethodActive, input_method_data::NonSpatialInputData};
-
-use crate::InputMethod;
+use crate::{
+    InputMethodDisabled, input_method::InputMethod, input_method_data::NonSpatialInputData,
+    update_input_method_disabled,
+};
 
 pub struct SuisXrControllerPlugin;
 
@@ -45,13 +46,19 @@ impl Plugin for SuisXrControllerPlugin {
 }
 
 fn update_method_state(
-    mut query: Query<
-        (&mut InputMethodActive, &XrSpaceLocationFlags),
+    query: Query<
+        (Entity, Has<InputMethodDisabled>, &XrSpaceLocationFlags),
         With<SuisXrControllerInputMethod>,
     >,
+    mut cmds: Commands,
 ) {
-    for (mut active, flags) in &mut query {
-        active.0 = flags.position_tracked || flags.rotation_tracked;
+    for (entity, disabled, flags) in &query {
+        update_input_method_disabled(
+            &mut cmds,
+            entity,
+            flags.position_tracked && flags.rotation_tracked,
+            disabled,
+        );
     }
 }
 

@@ -9,6 +9,11 @@ pub struct InputHandler {
     messages: Vec<(Entity, InputMethodMessage)>,
 }
 
+pub enum FieldRef {
+    This,
+    Entity(Entity),
+}
+
 impl InputHandler {
     pub const fn new() -> InputHandler {
         InputHandler {

@@ -9,12 +9,13 @@ use bevy_mod_xr::{
 };
 
 use crate::{
-    SuisPreUpdateSets,
+    InputMethodDisabled, SuisPreUpdateSets,
     field::Field,
     hand::{Finger, Hand, Joint, Thumb},
     input_handler::InputHandler,
     input_method::InputMethod,
     input_method_data::{NonSpatialInputData, SpatialInputData},
+    update_input_method_disabled,
 };
 pub struct SuisBundledXrHandsInputMethodPlugin;
 
@@ -22,7 +23,7 @@ impl Plugin for SuisBundledXrHandsInputMethodPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             PreUpdate,
-            update_hand_input_methods
+            (update_active, update_data)
                 .in_set(SuisPreUpdateSets::UpdateInputMethods)
                 .after(XrSpaceSyncSet),
         );
@@ -31,7 +32,31 @@ impl Plugin for SuisBundledXrHandsInputMethodPlugin {
     }
 }
 
-fn update_hand_input_methods(
+fn update_active(
+    query: Query<
+        (Entity, &HandtrackingJoints, Has<InputMethodDisabled>),
+        With<SuisBundledXrHandInputMethod>,
+    >,
+    flag_query: Query<&XrSpaceLocationFlags>,
+    mut cmds: Commands,
+) {
+    for (e, joints, disabled) in &query {
+        if let Ok(flags) = flag_query.get_many(joints.0) {
+            update_input_method_disabled(
+                &mut cmds,
+                e,
+                flags
+                    .iter()
+                    .any(|f| f.position_tracked && f.rotation_tracked),
+                disabled,
+            );
+        } else {
+            warn!("unable to get joint location flags");
+        }
+    }
+}
+
+fn update_data(
     mut query: Query<
         (
             &mut InputMethod,

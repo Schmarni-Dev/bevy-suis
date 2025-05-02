@@ -6,8 +6,9 @@ use bevy::{
 };
 
 use crate::{
-    input_method_data::{SpatialInputData, NonSpatialInputData},
-    InputMethod, InputMethodActive, SuisPreUpdateSets,
+    InputMethodDisabled, SuisPreUpdateSets,
+    input_method::InputMethod,
+    input_method_data::{NonSpatialInputData, SpatialInputData},
 };
 
 pub struct SuisWindowPointerPlugin;
@@ -150,9 +151,14 @@ fn update_input_method_ray(
     cams: Query<(&Camera, &GlobalTransform)>,
     windows: Query<(&Window, &SuisWindowCursor)>,
     mut input_method: Query<
-        (&mut SpatialInputData, &mut Transform, &mut InputMethodActive),
+        (
+            &mut SpatialInputData,
+            &mut Transform,
+            Has<InputMethodDisabled>,
+        ),
         With<MouseInputMethod>,
     >,
+    mut cmds: Commands,
 ) {
     let Ok(primary_window) = primary_window.single() else {
         warn_once!("no primary window?");
@@ -172,13 +178,14 @@ fn update_input_method_ray(
             error_once!("Invalid window entity!");
             continue;
         };
-        let Ok((mut method, mut transform, mut active)) = input_method.get_mut(suis_cursor.0)
-        else {
+        let Ok((mut method, mut transform, disabled)) = input_method.get_mut(suis_cursor.0) else {
             error!("unable to get input method for window");
             continue;
         };
         if let Some(pos) = window.cursor_position() {
-            active.0 = true;
+            if disabled {
+                cmds.entity(suis_cursor.0).remove::<InputMethodDisabled>();
+            }
             if let Some(pos) = get_viewport_pos(pos, camera) {
                 if let Ok(ray) = camera.viewport_to_world(cam_transform, pos) {
                     *method = SpatialInputData::Ray(ray);
@@ -186,8 +193,8 @@ fn update_input_method_ray(
                     transform.look_at(ray.origin + *ray.direction, cam_transform.up());
                 }
             }
-        } else {
-            active.0 = false;
+        } else if !disabled {
+            cmds.entity(suis_cursor.0).insert(InputMethodDisabled);
         }
     }
 }

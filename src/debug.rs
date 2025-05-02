@@ -1,6 +1,9 @@
 use bevy::{color::palettes::css, prelude::*};
 
-use crate::{field::Field, input_method_data::SpatialInputData, InputMethod, InputMethodActive};
+use crate::{
+    InputMethodDisabled, field::Field, input_method::InputMethod,
+    input_method_data::SpatialInputData,
+};
 pub struct SuisDebugGizmosPlugin;
 
 impl Plugin for SuisDebugGizmosPlugin {
@@ -15,18 +18,18 @@ fn draw_method_gizmos(
         &GlobalTransform,
         &InputMethod,
         &SpatialInputData,
-        &InputMethodActive,
+        Has<InputMethodDisabled>,
     )>,
     mut gizmos: Gizmos,
 ) {
-    for (transform, method, input, active) in &method_query {
-        let color = match (active.0, method.captured_by.is_some()) {
+    for (transform, method, input, disabled) in &method_query {
+        let color = match (!disabled, method.captured_by.is_some()) {
             (true, true) => css::LIME,
             (true, false) => css::BLUE,
             (false, _) => css::LIGHT_GRAY,
         };
         match input {
-            // TODO: how to visualize hands without conflicting with bevy_xr_utils?
+            // TODO: how to visualize hands without conflicting with bevy_mod_xr?
             SpatialInputData::Hand(_) => {}
             SpatialInputData::Tip(isometry) => {
                 let t = Transform::from_isometry(*isometry);
