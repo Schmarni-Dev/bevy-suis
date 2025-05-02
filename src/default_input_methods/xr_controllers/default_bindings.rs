@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use schminput::{prelude::RequestedSubactionPaths, ActionSet};
+use schminput::{ActionSet, prelude::RequestedSubactionPaths};
 
 use super::interaction_profiles::SupportedInteractionProfiles;
 
@@ -68,7 +68,7 @@ pub struct SuisXrControllerActions {
 
 #[cfg(test)]
 mod tests {
-    use bevy::{ecs::world::CommandQueue, utils::hashbrown::HashSet};
+    use bevy::{ecs::world::CommandQueue, platform::collections::HashSet};
 
     use super::*;
 
@@ -143,13 +143,12 @@ mod tests {
 
 mod binding_gen {
 
+    use super::super::interaction_profiles::SupportedInteractionProfile as Profile;
     use super::*;
-    use crate::{
-        gen_bindings, xr_controllers::interaction_profiles::SupportedInteractionProfile as Profile,
-    };
+    use crate::gen_bindings;
     use schminput::{
-        openxr::OxrBindings, xr::SpaceActionValue as Space, Action, F32ActionValue as F32,
-        Vec2ActionValue as Vec2,
+        Action, F32ActionValue as F32, Vec2ActionValue as Vec2, openxr::OxrBindings,
+        xr::SpaceActionValue as Space,
     };
 
     use super::XrControllerInputActions;
