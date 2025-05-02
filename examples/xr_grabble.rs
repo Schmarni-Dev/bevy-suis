@@ -6,14 +6,15 @@ use bevy_mod_xr::{
 };
 use bevy_suis::{
     debug::SuisDebugGizmosPlugin,
-    input_method_data::InputMethodData,
+    input_handler::InputHandler,
+    input_method_data::NonSpatialInputData,
     window_pointers::SuisWindowPointerPlugin,
     xr::SuisXrPlugin,
     xr_controllers::{
         default_bindings::SuisXrControllerDefaultBindingsPlugin,
         interaction_profiles::SupportedInteractionProfiles, SuisXrControllerPlugin,
     },
-    CaptureContext, Field, InputHandler, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
+    CaptureContext, Field, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
 };
 use bevy_xr_utils::hand_gizmos::HandGizmosPlugin;
 use openxr::ReferenceSpaceType;
@@ -67,7 +68,11 @@ fn move_grabble(
         ),
         With<Grabble>,
     >,
-    method_query: Query<(&GlobalTransform, &InputMethodData, Has<PointerInputMethod>)>,
+    method_query: Query<(
+        &GlobalTransform,
+        &NonSpatialInputData,
+        Has<PointerInputMethod>,
+    )>,
     parent_query: Query<&GlobalTransform>,
     mut cmds: Commands,
 ) {
@@ -127,26 +132,24 @@ fn make_spectator_cam_follow(
 
 fn setup(mut cmds: Commands) {
     cmds.spawn((
-        InputHandler::new(capture_condition),
+        InputHandler::new(),
         Field::Sphere(0.2),
-        SpatialBundle::from_transform(Transform::from_xyz(0.0, 0.5, -0.5)),
+        Transform::from_xyz(0.0, 0.5, -0.5),
         Grabble,
     ));
     cmds.spawn((
-        Camera3dBundle {
-            projection: Projection::Perspective(PerspectiveProjection {
-                fov: 110f32.to_radians(),
-                ..Default::default()
-            }),
+        Camera3d::default(),
+        Projection::Perspective(PerspectiveProjection {
+            fov: 110f32.to_radians(),
             ..Default::default()
-        },
+        }),
         Cam,
     ));
 }
 
 fn capture_condition(
     ctx: In<CaptureContext>,
-    query: Query<&InputMethodData>,
+    query: Query<&NonSpatialInputData>,
     handler_query: Query<&InputHandlerCaptures>,
 ) -> bool {
     // Only Capture one method

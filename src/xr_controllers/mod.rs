@@ -15,7 +15,7 @@ use schminput::openxr::OxrInputPlugin;
 use schminput::xr::AttachSpaceToEntity;
 use schminput::{prelude::*, SchminputPlugin, SchminputSet};
 
-use crate::{input_method_data::InputMethodData, InputMethodActive};
+use crate::{input_method_data::NonSpatialInputData, InputMethodActive};
 
 use crate::{xr::HandSide, InputMethod};
 
@@ -75,7 +75,7 @@ fn update_method_data(
     f32: Query<&F32ActionValue>,
     actions: Res<SuisXrControllerActions>,
     mut method_query: Query<
-        (&mut InputMethodData, &HandSide),
+        (&mut NonSpatialInputData, &HandSide),
         (With<InputMethod>, With<SuisXrControllerInputMethod>),
     >,
     mut last_delta_scroll: Local<(Vec2, Vec2)>,
@@ -87,8 +87,8 @@ fn update_method_data(
         actions: &XrControllerInputActions,
         old_delta: &mut Vec2,
         time: &Time,
-    ) -> InputMethodData {
-        InputMethodData {
+    ) -> NonSpatialInputData {
+        NonSpatialInputData {
             scroll: Some(
                 (vec2
                     .get(actions.scroll_continuous)
@@ -122,7 +122,6 @@ fn update_method_data(
                 .unwrap_or_default(),
             context: f32.get(actions.context).map(|v| v.any).unwrap_or_default(),
             grab: f32.get(actions.grab).map(|v| v.any).unwrap_or_default(),
-            hand: None,
         }
     }
     let action_data_left = get_data(
@@ -158,7 +157,7 @@ fn setup(
     let method_left = cmds
         .spawn((
             SuisXrControllerInputMethod,
-            InputMethodData::default(),
+            NonSpatialInputData::default(),
             HandSide::Left,
             LeftHand,
         ))
@@ -166,7 +165,7 @@ fn setup(
     let method_right = cmds
         .spawn((
             SuisXrControllerInputMethod,
-            InputMethodData::default(),
+            NonSpatialInputData::default(),
             HandSide::Right,
             RightHand,
         ))

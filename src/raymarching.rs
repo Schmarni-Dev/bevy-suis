@@ -8,28 +8,72 @@ use bevy::{
 use crate::Field;
 
 #[derive(Clone, Copy, Component, Debug, Deref, DerefMut)]
-pub struct RaymarchMaxIterations(pub NonZeroU32);
-
-impl Default for RaymarchMaxIterations {
+pub struct RaymarchMaxSteps(pub NonZeroU32);
+impl Default for RaymarchMaxSteps {
     fn default() -> Self {
         Self(500.try_into().unwrap())
     }
 }
+pub const RAYMARCH_MAX_STEPS: u32 = 1000;
+pub const RAYMARCH_MIN_STEP_SIZE: f32 = 0.001;
+pub const RAYMARCH_MAX_DISTANCE: f32 = 10_000.0;
 
 #[derive(Clone, Copy, Component, Debug, Deref)]
-pub struct RaymarchDefaultStepSize(pub f32);
-impl Default for RaymarchDefaultStepSize {
+pub struct RaymarchMinStepSize(pub f32);
+impl Default for RaymarchMinStepSize {
     fn default() -> Self {
         Self(0.001)
     }
+}
+
+#[derive(Clone, Copy, Component, Debug, Deref)]
+pub struct RaymarchMaxDistance(pub f32);
+impl Default for RaymarchMaxDistance {
+    fn default() -> Self {
+        Self(1_000.0)
+    }
+}
+
+pub struct RayMarchResult {
+    pub closest_distance: f32,
+    pub deepest_point_ray_length: f32,
+    pub ray_lenght: f32,
+    pub ray_steps: u32,
+}
+
+pub fn raymarch_field(
+    ray: Ray3d,
+    field: &Field,
+    field_transform: &GlobalTransform,
+) -> RayMarchResult {
+    let mut result = RayMarchResult {
+        closest_distance: f32::MAX,
+        deepest_point_ray_length: 0.,
+        ray_lenght: 0.,
+        ray_steps: 0,
+    };
+
+    while result.ray_steps < RAYMARCH_MAX_STEPS && result.ray_lenght < RAYMARCH_MAX_DISTANCE {
+        let point = ray.origin + (ray.direction.as_vec3() * result.ray_lenght);
+        let distance = field.distance(field_transform, point);
+        if distance < result.closest_distance {
+            result.closest_distance = distance;
+            result.deepest_point_ray_length = result.ray_lenght;
+        }
+        // max_distance isn't meant for this but it doesn't make sense to march further than the
+        // limit
+        result.ray_lenght += distance.max(RAYMARCH_MIN_STEP_SIZE);
+    }
+
+    result
 }
 
 // Returns Entities sorted by distance from ray origin
 pub fn raymarch_fields(
     ray: &Ray3d,
     fields: Vec<(Entity, &Field, &GlobalTransform)>,
-    max_iterations: &RaymarchMaxIterations,
-    default_step_size: &RaymarchDefaultStepSize,
+    max_iterations: &RaymarchMaxSteps,
+    default_step_size: &RaymarchMinStepSize,
 ) -> Vec<(Vec3, Entity)> {
     raymarch(
         ray,
@@ -54,8 +98,8 @@ struct RaymarchData {
 fn raymarch(
     ray: &Ray3d,
     fields: Vec<(Entity, &Field, &GlobalTransform)>,
-    max_iterations: &RaymarchMaxIterations,
-    min_step_size: &RaymarchDefaultStepSize,
+    max_iterations: &RaymarchMaxSteps,
+    min_step_size: &RaymarchMinStepSize,
     curr_iteration: u32,
     curr_distance: f32,
     mut curr_handlers: EntityHashMap<RaymarchData>,
@@ -75,7 +119,7 @@ fn raymarch(
             continue;
         }
         let closest_point = field.closest_point(field_transform, curr_point);
-        let distance = closest_point.distance(curr_point);
+        let distance = closest_point.distance(curr_point.into());
         if step_size.is_none() || step_size.is_some_and(|d| d > distance) {
             step_size = Some(distance);
         }

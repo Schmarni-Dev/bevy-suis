@@ -6,6 +6,8 @@ use bevy::{
 #[cfg(feature = "xr")]
 use bevy_mod_xr::hands::HandBone;
 
+use crate::Field;
+
 #[derive(Clone, Copy, Debug, Reflect)]
 pub struct Joint {
     pub pos: Vec3,
@@ -119,7 +121,64 @@ impl Hand {
             wrist: Joint::empty(),
         }
     }
+    pub fn transform(self, mat: &Mat4) -> Hand {
+        Hand {
+            thumb: Thumb {
+                tip: mul_joint(mat, self.thumb.tip),
+                distal: mul_joint(mat, self.thumb.distal),
+                proximal: mul_joint(mat, self.thumb.proximal),
+                metacarpal: mul_joint(mat, self.thumb.metacarpal),
+            },
+            index: Finger {
+                tip: mul_joint(mat, self.index.tip),
+                distal: mul_joint(mat, self.index.distal),
+                proximal: mul_joint(mat, self.index.proximal),
+                intermediate: mul_joint(mat, self.index.intermediate),
+                metacarpal: mul_joint(mat, self.index.metacarpal),
+            },
+            middle: Finger {
+                tip: mul_joint(mat, self.middle.tip),
+                distal: mul_joint(mat, self.middle.distal),
+                proximal: mul_joint(mat, self.middle.proximal),
+                intermediate: mul_joint(mat, self.middle.intermediate),
+                metacarpal: mul_joint(mat, self.middle.metacarpal),
+            },
+            ring: Finger {
+                tip: mul_joint(mat, self.ring.tip),
+                distal: mul_joint(mat, self.ring.distal),
+                proximal: mul_joint(mat, self.ring.proximal),
+                intermediate: mul_joint(mat, self.ring.intermediate),
+                metacarpal: mul_joint(mat, self.ring.metacarpal),
+            },
+            little: Finger {
+                tip: mul_joint(mat, self.little.tip),
+                distal: mul_joint(mat, self.little.distal),
+                proximal: mul_joint(mat, self.little.proximal),
+                intermediate: mul_joint(mat, self.little.intermediate),
+                metacarpal: mul_joint(mat, self.little.metacarpal),
+            },
+            palm: mul_joint(mat, self.palm),
+            wrist: mul_joint(mat, self.wrist),
+        }
+    }
 }
+
+impl Hand {
+    pub fn distance(&self, field: &Field, field_transform: &GlobalTransform) -> f32 {
+        [
+            self.thumb.tip,
+            self.index.tip,
+            self.middle.tip,
+            self.ring.tip,
+            self.little.tip,
+        ]
+        .map(|tip| field.distance(field_transform, tip.pos))
+        .into_iter()
+        .reduce(f32::min)
+        .unwrap()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Reflect)]
 pub struct HandInputMethodData(Hand);
 impl HandInputMethodData {

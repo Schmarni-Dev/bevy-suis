@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
 use bevy_mod_xr::session::XrSessionCreated;
 use bevy_suis::{
-    debug::SuisDebugGizmosPlugin, xr::SuisXrPlugin, xr_controllers::SuisXrControllerPlugin,
-    CaptureContext, Field, InputHandler, SuisCorePlugin,
+    debug::SuisDebugGizmosPlugin, input_handler::InputHandler, xr::SuisXrPlugin,
+    xr_controllers::SuisXrControllerPlugin, CaptureContext, Field, SuisCorePlugin,
 };
 use openxr::ReferenceSpaceType;
 
@@ -37,11 +37,11 @@ fn make_spectator_cam_follow(
 
 fn setup(mut cmds: Commands) {
     cmds.spawn((
-        InputHandler::new(capture_condition),
+        InputHandler::new(),
         Field::Sphere(0.2),
-        SpatialBundle::from_transform(Transform::from_xyz(0.0, 1.5, -1.0)),
+        Transform::from_xyz(0.0, 1.5, -1.0),
     ));
-    cmds.spawn((Camera3dBundle::default(), Cam));
+    cmds.spawn((Camera3d::default(), Cam));
 }
 
 fn capture_condition(ctx: In<CaptureContext>) -> bool {

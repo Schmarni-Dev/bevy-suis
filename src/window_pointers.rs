@@ -6,7 +6,7 @@ use bevy::{
 };
 
 use crate::{
-    input_method_data::InputMethodData, InputMethod, InputMethodActive, PointerInputMethod,
+    input_method_data::NonSpatialInputData, InputMethod, InputMethodActive, PointerInputMethod,
     SuisPreUpdateSets,
 };
 
@@ -42,7 +42,7 @@ fn spawn_method_on_entity(cmds: &mut Commands, e: Entity) {
             InputMethod::new(),
             PointerInputMethod(Ray3d::new(Vec3::ZERO, Dir3::NEG_Z)),
             MouseInputMethod,
-            InputMethodData::default(),
+            NonSpatialInputData::default(),
         ))
         .id();
     cmds.entity(e).insert(SuisWindowCursor(method));
@@ -115,7 +115,7 @@ impl Default for SuisMouseConfig {
 
 // doesn't handle multiple windows correctly
 fn update_mouse_data(
-    mut query: Query<&mut InputMethodData, (With<InputMethod>, With<MouseInputMethod>)>,
+    mut query: Query<&mut NonSpatialInputData, (With<InputMethod>, With<MouseInputMethod>)>,
     mut scroll: EventReader<MouseWheel>,
     buttons: Res<ButtonInput<MouseButton>>,
     config: Res<SuisMouseConfig>,

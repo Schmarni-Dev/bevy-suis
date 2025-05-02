@@ -1,3 +1,4 @@
+use bevy::math::{vec3a, Vec3A};
 use bevy::prelude::*;
 use bevy::{
     ecs::{
@@ -7,10 +8,15 @@ use bevy::{
     },
     math::vec3,
 };
-use raymarching::{raymarch_fields, RaymarchDefaultStepSize, RaymarchMaxIterations};
+use input_handler::InputHandler;
+use input_method::InputMethod;
+use raymarching::{raymarch_field, raymarch_fields, RayMarchResult, RaymarchMaxSteps, RaymarchMinStepSize};
 use std::{cmp::Ordering, hash::Hash};
 pub mod debug;
 pub mod hand;
+pub mod input_handler;
+pub mod input_method;
+pub mod input_method_capturing;
 pub mod input_method_data;
 pub mod raymarching;
 pub mod window_pointers;
@@ -23,15 +29,17 @@ impl Plugin for SuisCorePlugin {
         app.configure_sets(
             PreUpdate,
             (
+                SuisPreUpdateSets::PrepareMethodEvents,
                 SuisPreUpdateSets::UpdateInputMethods,
-                SuisPreUpdateSets::InputMethodCapturing,
+                SuisPreUpdateSets::CaptureInputMethods,
+                SuisPreUpdateSets::SendInputData,
             ),
         );
         app.add_systems(
             PreUpdate,
             (clear_captures, run_capture_conditions)
                 .chain()
-                .in_set(SuisPreUpdateSets::InputMethodCapturing),
+                .in_set(SuisPreUpdateSets::CaptureInputMethods),
         );
     }
 }
@@ -65,8 +73,10 @@ struct LastCapturedBy(Option<Entity>);
 
 #[derive(SystemSet, Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub enum SuisPreUpdateSets {
+    PrepareMethodEvents,
     UpdateInputMethods,
-    InputMethodCapturing,
+    CaptureInputMethods,
+    SendInputData,
 }
 
 pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
@@ -75,8 +85,8 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
         &GlobalTransform,
         Option<(
             &PointerInputMethod,
-            Option<&RaymarchMaxIterations>,
-            Option<&RaymarchDefaultStepSize>,
+            Option<&RaymarchMaxSteps>,
+            Option<&RaymarchMinStepSize>,
         )>,
     )>,
 ) -> Vec<InputHandlingContext> {
@@ -109,7 +119,8 @@ pub fn pipe_input_ctx<HandlerFilter: QueryFilter>(
             let closest_point = handler_transform
                 .compute_matrix()
                 .inverse()
-                .transform_point3(field.closest_point(handler_transform, point));
+                .transform_point3a(field.closest_point(handler_transform, point))
+                .into();
             methods.push(InnerInputHandlingContext {
                 input_method: method,
                 input_method_location: Transform::from_matrix(
@@ -168,7 +179,7 @@ fn run_capture_conditions(world: &mut World) {
                 .map(|(e, field, field_location)| {
                     let point = field.closest_point(field_location, method_position);
 
-                    let distance = point.distance(method_position);
+                    let distance = point.distance(method_position.into());
 
                     (e, distance, method_position)
                 })
@@ -228,43 +239,43 @@ fn run_capture_conditions(world: &mut World) {
         let closest_point = handler_transform
             .compute_matrix()
             .inverse()
-            .transform_point3(handler_field.closest_point(&handler_transform, point));
+            .transform_point3a(handler_field.closest_point(&handler_transform, point));
         let distance = handler_field.distance(&handler_transform, point);
         // send a precomputed distance?
         let point = handler_transform
             .compute_matrix()
             .inverse()
             .transform_point3(point);
-        handler.capture_condition.initialize(world);
-        let wants_to_capture = handler.capture_condition.run(
-            CaptureContext {
-                handler: handler_entity,
-                handler_location: handler_transform,
-                input_method: method_entity,
-                input_method_location: Transform::from_matrix(
-                    handler_transform
-                        .compute_matrix()
-                        .inverse()
-                        .mul_mat4(&method_location.compute_matrix()),
-                )
-                .with_translation(point),
-                closest_point,
-                distance,
-            },
-            world,
-        );
+        // handler.capture_condition.initialize(world);
+        // let wants_to_capture = handler.capture_condition.run(
+        //     CaptureContext {
+        //         handler: handler_entity,
+        //         handler_location: handler_transform,
+        //         input_method: method_entity,
+        //         input_method_location: Transform::from_matrix(
+        //             handler_transform
+        //                 .compute_matrix()
+        //                 .inverse()
+        //                 .mul_mat4(&method_location.compute_matrix()),
+        //         )
+        //         .with_translation(point),
+        //         closest_point,
+        //         distance,
+        //     },
+        //     world,
+        // );
         let mut e = world.entity_mut(handler_entity);
         let mut captures = e.take::<InputHandlerCaptures>().unwrap_or_default();
-        if wants_to_capture {
-            method.captured_by = Some(handler_entity);
-            captures.captured_methods.push(method_entity);
-        }
+        // if wants_to_capture {
+        //     method.captured_by = Some(handler_entity);
+        //     captures.captured_methods.push(method_entity);
+        // }
         e.insert(captures);
         e.insert(handler);
         world.entity_mut(method_entity).insert(method);
-        if wants_to_capture {
-            break;
-        }
+        // if wants_to_capture {
+        //     break;
+        // }
     }
     world.insert_resource(state);
 }
@@ -283,33 +294,8 @@ pub struct InnerInputHandlingContext {
 }
 
 #[derive(Component, Debug, Default)]
-#[require(Transform)]
-pub struct InputMethod {
-    pub captured_by: Option<Entity>,
-}
-
-impl InputMethod {
-    pub const fn new() -> InputMethod {
-        InputMethod { captured_by: None }
-    }
-}
-
-#[derive(Component, Debug, Default)]
 pub struct InputHandlerCaptures {
     pub captured_methods: Vec<Entity>,
-}
-
-#[derive(Component, Debug)]
-pub struct InputHandler {
-    pub capture_condition: Box<dyn System<In = In<CaptureContext>, Out = bool>>,
-}
-
-impl InputHandler {
-    pub fn new<T>(system: impl IntoSystem<In<CaptureContext>, bool, T>) -> InputHandler {
-        InputHandler {
-            capture_condition: Box::new(IntoSystem::into_system(system)),
-        }
-    }
 }
 
 pub struct CaptureContext {
@@ -330,28 +316,35 @@ pub enum Field {
     Cuboid(Cuboid),
 }
 impl Field {
-    pub fn closest_point(&self, field_transform: &GlobalTransform, point: Vec3) -> Vec3 {
+    pub fn closest_point(
+        &self,
+        field_transform: &GlobalTransform,
+        point: impl Into<Vec3A>,
+    ) -> Vec3A {
+        let point = point.into();
         point - self.normal(field_transform, point) * self.distance(field_transform, point)
     }
     /// point should be in world-space
-    pub fn normal(&self, field_transform: &GlobalTransform, point: Vec3) -> Vec3 {
-        let distance_vec = Vec3::splat(self.distance(field_transform, point));
+    pub fn normal(&self, field_transform: &GlobalTransform, point: impl Into<Vec3A>) -> Vec3A {
+        let point = point.into();
+        let distance_vec = Vec3A::splat(self.distance(field_transform, point));
         const R: f32 = 0.0001;
-        let r_vec = Vec3::new(
-            self.distance(field_transform, point + vec3(R, 0.0, 0.0)),
-            self.distance(field_transform, point + vec3(0.0, R, 0.0)),
-            self.distance(field_transform, point + vec3(0.0, 0.0, R)),
+        let r_vec = Vec3A::new(
+            self.distance(field_transform, point + vec3a(R, 0.0, 0.0)),
+            self.distance(field_transform, point + vec3a(0.0, R, 0.0)),
+            self.distance(field_transform, point + vec3a(0.0, 0.0, R)),
         );
         let local_normal = distance_vec - r_vec;
         -field_transform
             .affine()
-            .transform_vector3(local_normal)
+            .transform_vector3a(local_normal)
             .normalize()
     }
     /// point should be in world-space
-    pub fn distance(&self, field_transform: &GlobalTransform, point: Vec3) -> f32 {
+    pub fn distance(&self, field_transform: &GlobalTransform, point: impl Into<Vec3A>) -> f32 {
+        let point = point.into();
         let world_to_local_matrix = field_transform.compute_matrix().inverse();
-        let p = world_to_local_matrix.transform_point3(point);
+        let p = world_to_local_matrix.transform_point3a(point);
         match self {
             Field::Sphere(radius) => p.length() - radius,
             Field::Cuboid(cuboid) => {
@@ -364,6 +357,17 @@ impl Field {
                 v.length() + q.x.max(q.y.max(q.z)).min(0_f32)
             }
         }
+    }
+    pub fn raymarch(
+        &self,
+        field_transform: &GlobalTransform,
+        ray: Ray3d,
+    ) -> RayMarchResult {
+        raymarch_field(
+            ray,
+            self,
+            field_transform,
+        )
     }
 }
 
@@ -381,8 +385,8 @@ struct RunCaptureConditionsState(
                 Option<&'static InputMethodActive>,
                 Option<(
                     &'static PointerInputMethod,
-                    Option<&'static RaymarchMaxIterations>,
-                    Option<&'static RaymarchDefaultStepSize>,
+                    Option<&'static RaymarchMaxSteps>,
+                    Option<&'static RaymarchMinStepSize>,
                 )>,
             ),
         >,
