@@ -1,4 +1,4 @@
-use bevy::{prelude::Deref, utils::hashbrown::HashSet};
+use bevy::{platform::collections::HashSet, prelude::Deref};
 
 // could i macro this and the get_path impl? yeah but i don't care enough rn
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

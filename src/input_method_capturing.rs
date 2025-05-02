@@ -1,14 +1,15 @@
 use bevy::{
     ecs::entity::{EntityHashMap, EntityHashSet},
     prelude::*,
-    transform::systems::{propagate_transforms, sync_simple_transforms},
+    transform::systems::{propagate_parent_transforms, sync_simple_transforms},
 };
 
 use crate::{
+    SuisPreUpdateSets,
+    field::Field,
     input_handler::InputHandler,
     input_method::InputMethod,
     input_method_data::{InputData, NonSpatialInputData, SpatialInputData},
-    field::Field, SuisPreUpdateSets,
 };
 pub struct InputMethodCapturingPlugin;
 
@@ -18,7 +19,7 @@ impl Plugin for InputMethodCapturingPlugin {
             PreUpdate,
             (
                 sync_simple_transforms,
-                propagate_transforms,
+                propagate_parent_transforms,
                 transfer_input_method_events,
             )
                 .in_set(SuisPreUpdateSets::PrepareMethodEvents),

@@ -2,21 +2,21 @@ use bevy::{prelude::*, render::pipelined_rendering::PipelinedRenderingPlugin};
 use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
 use bevy_mod_xr::{
     camera::XrCamera,
-    session::{session_running, XrSessionCreated},
+    session::{XrSessionCreated, session_running},
 };
 use bevy_suis::{
+    CaptureContext, Field, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
     debug::SuisDebugGizmosPlugin,
+    hand_debug_gizmos::HandGizmosPlugin,
     input_handler::InputHandler,
     input_method_data::NonSpatialInputData,
     window_pointers::SuisWindowPointerPlugin,
     xr::SuisXrPlugin,
     xr_controllers::{
-        default_bindings::SuisXrControllerDefaultBindingsPlugin,
-        interaction_profiles::SupportedInteractionProfiles, SuisXrControllerPlugin,
+        SuisXrControllerPlugin, default_bindings::SuisXrControllerDefaultBindingsPlugin,
+        interaction_profiles::SupportedInteractionProfiles,
     },
-    CaptureContext, Field, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
 };
-use bevy_xr_utils::hand_gizmos::HandGizmosPlugin;
 use openxr::ReferenceSpaceType;
 
 // TODO: improve capturing mechanism

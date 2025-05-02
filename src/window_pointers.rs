@@ -53,15 +53,15 @@ fn despawn_input_method_on_ref_remove(
     mut cmds: Commands,
     has: Query<&SuisWindowCursor>,
 ) {
-    if t.entity() == Entity::PLACEHOLDER {
+    if t.target() == Entity::PLACEHOLDER {
         warn_once!("OnRemove Called with Placeholder entity?!");
         return;
     }
-    let Ok(cursor) = has.get(t.entity()) else {
+    let Ok(cursor) = has.get(t.target()) else {
         warn!("very confused rn?!?!?!?!");
         return;
     };
-    cmds.entity(cursor.0).despawn_recursive();
+    cmds.entity(cursor.0).despawn();
 }
 
 fn despawn_input_methods(
@@ -69,16 +69,16 @@ fn despawn_input_methods(
     mut cmds: Commands,
     has: Query<&SuisWindowCursor>,
 ) {
-    if t.entity() == Entity::PLACEHOLDER {
+    if t.target() == Entity::PLACEHOLDER {
         warn_once!("OnRemove Called with Placeholder entity?!");
         return;
     }
-    let Ok(cursor) = has.get(t.entity()) else {
+    let Ok(cursor) = has.get(t.target()) else {
         warn!("Removing Window without Input method?");
         return;
     };
-    cmds.entity(cursor.0).despawn_recursive();
-    cmds.entity(t.entity()).remove::<SuisWindowCursor>();
+    cmds.entity(cursor.0).despawn();
+    cmds.entity(t.target()).remove::<SuisWindowCursor>();
 }
 fn spawn_input_methods(
     t: Trigger<OnAdd, Window>,
@@ -86,14 +86,14 @@ fn spawn_input_methods(
     has: Query<Has<SuisWindowCursor>>,
 ) {
     info!("spawn");
-    if t.entity() == Entity::PLACEHOLDER {
+    if t.target() == Entity::PLACEHOLDER {
         warn_once!("OnAdd Called with Placeholder entity?!");
         return;
     }
-    if has.get(t.entity()).unwrap_or(false) {
+    if has.get(t.target()).unwrap_or(false) {
         warn!("New Window already has a Suis Cursor?!?! how?!");
     }
-    spawn_method_on_entity(&mut cmds, t.entity());
+    spawn_method_on_entity(&mut cmds, t.target());
 }
 
 #[derive(Clone, Copy, Component, Debug, Default)]
@@ -154,7 +154,7 @@ fn update_input_method_ray(
         With<MouseInputMethod>,
     >,
 ) {
-    let Ok(primary_window) = primary_window.get_single() else {
+    let Ok(primary_window) = primary_window.single() else {
         warn_once!("no primary window?");
         return;
     };

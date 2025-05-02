@@ -9,15 +9,15 @@ use bevy::prelude::*;
 use bevy_mod_xr::{
     hands::{LeftHand, RightHand},
     session::{XrPreDestroySession, XrSessionCreated, XrState, XrTrackingRoot},
-    spaces::XrSpaceLocationFlags,
+    spaces::{XrSpaceLocationFlags, XrSpaceSyncSet},
 };
 use schminput::openxr::OxrInputPlugin;
 use schminput::xr::AttachSpaceToEntity;
-use schminput::{prelude::*, SchminputPlugin, SchminputSet};
+use schminput::{SchminputPlugin, SchminputSet, prelude::*};
 
-use crate::{input_method_data::NonSpatialInputData, InputMethodActive};
+use crate::{InputMethodActive, input_method_data::NonSpatialInputData};
 
-use crate::{xr::HandSide, InputMethod};
+use crate::{InputMethod, xr::HandSide};
 
 pub struct SuisXrControllerPlugin;
 
@@ -34,28 +34,13 @@ impl Plugin for SuisXrControllerPlugin {
         app.add_systems(XrSessionCreated, spawn_input_methods);
         app.add_systems(XrPreDestroySession, despawn_input_methods);
         app.add_systems(Startup, setup.after(SuisXrControllerBindingSet));
-        #[cfg(not(target_family = "wasm"))]
-        {
-            use bevy_mod_openxr::spaces::OxrSpaceSyncSet;
-            app.add_systems(
-                PreUpdate,
-                (update_method_state, update_method_data)
-                    .after(SchminputSet::SyncInputActions)
-                    .after(OxrSpaceSyncSet)
-                    .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
-            );
-        }
-        // Not Perfect since we don't schedule against SpaceSync, will be fixed in the next
-        // bevy_mod_xr version
-        #[cfg(target_family = "wasm")]
-        {
-            app.add_systems(
-                PreUpdate,
-                (update_method_state, update_method_data)
-                    .after(SchminputSet::SyncInputActions)
-                    .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
-            );
-        }
+        app.add_systems(
+            PreUpdate,
+            (update_method_state, update_method_data)
+                .after(SchminputSet::SyncInputActions)
+                .after(XrSpaceSyncSet)
+                .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
+        );
     }
 }
 
@@ -174,7 +159,7 @@ fn setup(
         .insert(AttachSpaceToEntity(method_left));
     cmds.entity(action.actions_right.pose)
         .insert(AttachSpaceToEntity(method_right));
-    cmds.entity(root.single())
+    cmds.entity(root.single().unwrap())
         .add_child(method_left)
         .add_child(method_right);
 }
