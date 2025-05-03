@@ -10,6 +10,7 @@ pub mod input_method_capturing;
 pub mod input_method_data;
 pub mod window_pointers;
 pub mod order_helper;
+pub mod handler_action;
 
 pub struct SuisCorePlugin;
 impl Plugin for SuisCorePlugin {
