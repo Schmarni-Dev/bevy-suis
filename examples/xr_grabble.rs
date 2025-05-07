@@ -1,8 +1,7 @@
 use bevy::{prelude::*, render::pipelined_rendering::PipelinedRenderingPlugin};
 use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
 use bevy_mod_xr::{
-    camera::XrCamera,
-    session::{session_running, XrSessionCreated},
+    camera::XrCamera, hand_debug_gizmos::HandGizmosPlugin, session::{session_running, XrSessionCreated}
 };
 use bevy_suis::{
     debug::SuisDebugGizmosPlugin,
@@ -15,7 +14,6 @@ use bevy_suis::{
     },
     CaptureContext, Field, InputHandler, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
 };
-use bevy_xr_utils::hand_gizmos::HandGizmosPlugin;
 use openxr::ReferenceSpaceType;
 
 // TODO: improve capturing mechanism
@@ -63,7 +61,7 @@ fn move_grabble(
             &GlobalTransform,
             &mut Transform,
             Option<&mut Grabbed>,
-            Option<&Parent>,
+            Option<&ChildOf>,
         ),
         With<Grabble>,
     >,
@@ -98,7 +96,7 @@ fn move_grabble(
         }
         if let Some(mut t) = grabbed {
             let w = parent
-                .and_then(|v| parent_query.get(v.get()).ok())
+                .and_then(|v| parent_query.get(v.parent()).ok())
                 .copied()
                 .unwrap_or(GlobalTransform::IDENTITY);
             if ranged {
@@ -122,24 +120,34 @@ fn make_spectator_cam_follow(
     let space = session
         .create_reference_space(ReferenceSpaceType::VIEW, Transform::IDENTITY)
         .unwrap();
-    cmds.entity(query.single()).insert(space.0);
+
+    match query.single() {
+        Ok(entity) => {
+            cmds.entity(entity).insert(space.0);
+        }
+        Err(_) => {
+            error!("No camera entity found, unable to attach space.");
+            return;
+        }
+    }
+
 }
 
 fn setup(mut cmds: Commands) {
     cmds.spawn((
         InputHandler::new(capture_condition),
         Field::Sphere(0.2),
-        SpatialBundle::from_transform(Transform::from_xyz(0.0, 0.5, -0.5)),
+        Transform::from_xyz(0.0, 0.5, -0.5),
+        Visibility::default(),
         Grabble,
     ));
     cmds.spawn((
-        Camera3dBundle {
-            projection: Projection::Perspective(PerspectiveProjection {
-                fov: 110f32.to_radians(),
-                ..Default::default()
-            }),
+        Camera3d::default(),
+        Projection::Perspective(PerspectiveProjection {
+            fov: 110f32.to_radians(),
             ..Default::default()
-        },
+        }),
+        Transform::default(),
         Cam,
     ));
 }

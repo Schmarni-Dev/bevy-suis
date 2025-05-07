@@ -32,16 +32,30 @@ fn make_spectator_cam_follow(
     let space = session
         .create_reference_space(ReferenceSpaceType::VIEW, Transform::IDENTITY)
         .unwrap();
-    cmds.entity(query.single()).insert(space.0);
+    match query.single() {
+        Ok(entity) => {
+            cmds.entity(entity).insert(space.0);
+        }
+        Err(_) => {
+            error!("No camera entity found, unable to attach space.");
+            return;
+        }
+    }
 }
 
 fn setup(mut cmds: Commands) {
     cmds.spawn((
         InputHandler::new(capture_condition),
         Field::Sphere(0.2),
-        SpatialBundle::from_transform(Transform::from_xyz(0.0, 1.5, -1.0)),
+        Transform::from_translation(Vec3::new(0.0, 1.5, -1.0)),
+        Visibility::default(),
     ));
-    cmds.spawn((Camera3dBundle::default(), Cam));
+    cmds.spawn((
+        Camera3d::default(), 
+        Transform::from_translation(Vec3::new(0.0, 1.5, 0.0)),
+        Visibility::default(),
+        Cam,
+    ));
 }
 
 fn capture_condition(ctx: In<CaptureContext>) -> bool {

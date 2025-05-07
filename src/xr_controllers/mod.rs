@@ -36,12 +36,12 @@ impl Plugin for SuisXrControllerPlugin {
         app.add_systems(Startup, setup.after(SuisXrControllerBindingSet));
         #[cfg(not(target_family = "wasm"))]
         {
-            use bevy_mod_openxr::spaces::OxrSpaceSyncSet;
+            use bevy_mod_xr::spaces::XrSpaceSyncSet;
             app.add_systems(
                 PreUpdate,
                 (update_method_state, update_method_data)
                     .after(SchminputSet::SyncInputActions)
-                    .after(OxrSpaceSyncSet)
+                    .after(XrSpaceSyncSet)
                     .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
             );
         }
@@ -175,9 +175,17 @@ fn setup(
         .insert(AttachSpaceToEntity(method_left));
     cmds.entity(action.actions_right.pose)
         .insert(AttachSpaceToEntity(method_right));
-    cmds.entity(root.single())
-        .add_child(method_left)
-        .add_child(method_right);
+
+    match root.single() {
+        Ok(e) => {
+            cmds.entity(e)
+                .add_child(method_left)
+                .add_child(method_right);
+        },
+        Err(_) => {
+            error!("No XrTrackingRoot found, not attaching input methods to it!");
+        }
+    }
 }
 
 fn despawn_input_methods(
