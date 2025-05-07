@@ -148,7 +148,7 @@ fn update_method_data(
 }
 
 #[derive(Default, Component)]
-struct SuisXrControllerInputMethod;
+pub struct SuisXrControllerInputMethod;
 
 fn setup(
     mut cmds: Commands,
