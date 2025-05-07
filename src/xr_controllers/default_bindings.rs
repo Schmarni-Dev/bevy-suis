@@ -68,7 +68,7 @@ pub struct SuisXrControllerActions {
 
 #[cfg(test)]
 mod tests {
-    use bevy::{ecs::world::CommandQueue, utils::hashbrown::HashSet};
+    use bevy::{ecs::world::CommandQueue, platform::collections::HashSet};
 
     use super::*;
 
