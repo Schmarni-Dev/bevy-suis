@@ -155,7 +155,7 @@ fn update_input_method_ray(
         &mut InputMethodActive,
     )>,
 ) {
-    let Ok(primary_window) = primary_window.get_single() else {
+    let Ok(primary_window) = primary_window.single() else {
         warn_once!("no primary window?");
         return;
     };

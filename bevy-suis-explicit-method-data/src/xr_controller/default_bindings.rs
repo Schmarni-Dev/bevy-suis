@@ -24,9 +24,10 @@ fn create_bindings(
     mut paths: ResMut<SubactionPaths>,
 ) {
     let set = cmds
-        .spawn(ActionSetBundle::new(
+        .spawn(ActionSet::new(
             "explicit_suis_input_set",
             "Spatial Universal Interaction System Explicit Input Sources",
+            1,
         ))
         .id();
     let mut req_paths = RequestedSubactionPaths::default();
@@ -36,8 +37,8 @@ fn create_bindings(
     fn get_bindings(
         binding: &'static str,
         profiles: &SupportedInteractionProfiles,
-    ) -> OxrActionBlueprint {
-        let mut blueprint = OxrActionBlueprint::default();
+    ) -> OxrBindings {
+        let mut blueprint = OxrBindings::default();
         for v in profiles.iter().map(|v| v.get_path()) {
             blueprint = blueprint.interaction_profile(v).binding(binding).end()
         }
@@ -45,14 +46,14 @@ fn create_bindings(
     }
     let space_left = cmds
         .spawn((
-            ActionBundle::new("method_pose_left", "Left Input Pose", set),
+            Action::new("method_pose_left", "Left Input Pose", set),
             SpaceActionValue::default(),
             get_bindings("/user/hand/left/input/aim/pose", &interaction_profiles),
         ))
         .id();
     let space_right = cmds
         .spawn((
-            ActionBundle::new("method_pose_right", "Right Input Pose", set),
+            Action::new("method_pose_right", "Right Input Pose", set),
             SpaceActionValue::default(),
             get_bindings("/user/hand/right/input/aim/pose", &interaction_profiles),
         ))
@@ -163,8 +164,7 @@ mod binding_gen {
     use bevy_suis::{
         gen_bindings, xr_controllers::interaction_profiles::SupportedInteractionProfile as Profile,
     };
-    use schminput::{
-        openxr::OxrActionBlueprint, ActionBundle, BoolActionValue as Bool, F32ActionValue as F32,
+    use schminput::{ BoolActionValue as Bool, F32ActionValue as F32,
         Vec2ActionValue as Vec2,
     };
 
