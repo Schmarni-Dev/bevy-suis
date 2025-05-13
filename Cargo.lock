@@ -404,7 +404,9 @@ name = "bevy-suis"
 version = "0.1.0"
 dependencies = [
  "bevy 0.16.0",
+ "bevy_mod_openxr 0.3.0",
  "bevy_mod_xr 0.3.0",
+ "openxr",
  "schminput 0.3.0",
 ]
 

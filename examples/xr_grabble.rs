@@ -1,21 +1,19 @@
-use bevy::{prelude::*, render::pipelined_rendering::PipelinedRenderingPlugin};
+use bevy::{
+    platform::collections::HashSet, prelude::*,
+    render::pipelined_rendering::PipelinedRenderingPlugin,
+};
 use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
 use bevy_mod_xr::{
     camera::XrCamera,
+    hand_debug_gizmos::HandGizmosPlugin,
     session::{XrSessionCreated, session_running},
 };
 use bevy_suis::{
-    CaptureContext, Field, InputHandlerCaptures, PointerInputMethod, SuisCorePlugin,
     debug::SuisDebugGizmosPlugin,
-    hand_debug_gizmos::HandGizmosPlugin,
-    input_handler::InputHandler,
-    input_method_data::NonSpatialInputData,
-    window_pointers::SuisWindowPointerPlugin,
-    xr::SuisXrPlugin,
-    xr_controllers::{
-        SuisXrControllerPlugin, default_bindings::SuisXrControllerDefaultBindingsPlugin,
-        interaction_profiles::SupportedInteractionProfiles,
-    },
+    default_input_methods::xr_controllers::{
+        default_bindings::SuisXrControllerDefaultBindingsPlugin,
+        interaction_profiles::{SupportedInteractionProfile, SupportedInteractionProfiles},
+    }, handler_action::SimpleHandlerAction,
 };
 use openxr::ReferenceSpaceType;
 
@@ -26,15 +24,12 @@ fn main() -> AppExit {
             DefaultPlugins.build().disable::<PipelinedRenderingPlugin>(),
         ))
         .add_plugins((
-            SuisCorePlugin,
-            SuisXrPlugin,
-            SuisDebugGizmosPlugin,
-            SuisXrControllerPlugin,
-            SuisWindowPointerPlugin,
             SuisXrControllerDefaultBindingsPlugin {
-                supported_interaction_profiles: SupportedInteractionProfiles::new()
-                    .with_oculus_touch(),
+                supported_interaction_profiles: SupportedInteractionProfiles(HashSet::from_iter([
+                    SupportedInteractionProfile::OculusTouch,
+                ])),
             },
+            SuisDebugGizmosPlugin,
             HandGizmosPlugin,
         ))
         .add_systems(Startup, setup)
@@ -51,6 +46,7 @@ fn update_camera(mut cams: Query<&mut Transform, (With<Camera>, Without<XrCamera
 }
 
 #[derive(Clone, Copy, Component)]
+#[require(SimpleHandlerAction)]
 struct Grabble;
 
 #[derive(Clone, Copy, Component)]
@@ -60,20 +56,14 @@ fn move_grabble(
     mut grabbles: Query<
         (
             Entity,
-            &InputHandlerCaptures,
             &GlobalTransform,
             &mut Transform,
             Option<&mut Grabbed>,
-            Option<&Parent>,
+            Option<&ChildOf>,
         ),
         With<Grabble>,
     >,
-    method_query: Query<(
-        &GlobalTransform,
-        &NonSpatialInputData,
-        Has<PointerInputMethod>,
-    )>,
-    parent_query: Query<&GlobalTransform>,
+    transform_query: Query<&GlobalTransform>,
     mut cmds: Commands,
 ) {
     for (handler_entity, handler, handler_gt, mut handler_transform, grabbed, parent) in

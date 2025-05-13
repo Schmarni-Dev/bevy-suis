@@ -1,16 +1,17 @@
-use bevy::prelude::*;
+use bevy::{app::PluginGroupBuilder, prelude::*};
+use input_method_capturing::InputMethodCapturingPlugin;
 use std::hash::Hash;
 pub mod debug;
 pub mod default_input_methods;
 pub mod field;
 pub mod hand;
+pub mod handler_actions;
 pub mod input_handler;
 pub mod input_method;
 pub mod input_method_capturing;
 pub mod input_method_data;
-pub mod window_pointers;
 pub mod order_helper;
-pub mod handler_action;
+pub mod window_pointers;
 
 pub struct SuisCorePlugin;
 impl Plugin for SuisCorePlugin {
@@ -25,6 +26,14 @@ impl Plugin for SuisCorePlugin {
                 SuisPreUpdateSets::SendInputData,
             ),
         );
+    }
+}
+pub struct SuisPlugins;
+impl PluginGroup for SuisPlugins {
+    fn build(self) -> PluginGroupBuilder {
+        PluginGroupBuilder::start::<Self>()
+            .add(SuisCorePlugin)
+            .add(InputMethodCapturingPlugin)
     }
 }
 
