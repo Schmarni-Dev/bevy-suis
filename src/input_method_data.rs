@@ -56,10 +56,9 @@ impl SpatialInputData {
 #[derive(Debug, Clone, Copy)]
 pub struct InputData {
     pub input_method: Entity,
-    pub input: SpatialInputData,
-    pub minimal_non_spatial_data: NonSpatialInputData,
+    pub spatial_data: SpatialInputData,
+    pub non_spatial_data: NonSpatialInputData,
     pub handler_location: GlobalTransform,
-    pub input_method_location: Isometry3d,
     pub distance: f32,
     pub captured: bool,
 }

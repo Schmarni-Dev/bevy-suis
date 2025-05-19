@@ -11,14 +11,14 @@ use crate::field::Field;
 #[derive(Clone, Copy, Debug, Reflect)]
 pub struct Joint {
     pub pos: Vec3,
-    pub ori: Quat,
+    pub rot: Quat,
     pub radius: f32,
 }
 impl Joint {
     const fn empty() -> Self {
         Self {
             pos: Vec3::ZERO,
-            ori: Quat::IDENTITY,
+            rot: Quat::IDENTITY,
             radius: 0.0,
         }
     }
@@ -236,7 +236,7 @@ impl HandInputMethodData {
 fn mul_joint(mat: &Mat4, joint: Joint) -> Joint {
     Joint {
         pos: mat.transform_point(joint.pos),
-        ori: mat.to_scale_rotation_translation().1 * joint.ori,
+        rot: mat.to_scale_rotation_translation().1 * joint.rot,
         radius: joint.radius,
     }
 }

@@ -53,6 +53,9 @@ impl SingleHandlerAction {
     pub fn actor_changed(&self) -> bool {
         self.actor_changed
     }
+    pub fn is_acting(&self) -> bool {
+        self.actor.is_some()
+    }
     pub fn actor(&self, handler: &InputHandler) -> Option<InputData> {
         self.actor
             .and_then(|actor| {

@@ -2,35 +2,50 @@ use bevy::{
     platform::collections::HashSet, prelude::*,
     render::pipelined_rendering::PipelinedRenderingPlugin,
 };
-use bevy_mod_openxr::{add_xr_plugins, session::OxrSession};
+use bevy_mod_openxr::{
+    add_xr_plugins, reference_space::OxrReferenceSpacePlugin, session::OxrSession,
+};
 use bevy_mod_xr::{
     camera::XrCamera,
     hand_debug_gizmos::HandGizmosPlugin,
     session::{XrSessionCreated, session_running},
 };
 use bevy_suis::{
+    SuisPlugins,
     debug::SuisDebugGizmosPlugin,
-    default_input_methods::xr_controllers::{
-        default_bindings::SuisXrControllerDefaultBindingsPlugin,
-        interaction_profiles::{SupportedInteractionProfile, SupportedInteractionProfiles},
-    }, handler_action::SimpleHandlerAction,
+    default_input_methods::{
+        SuisBundledInputMethodPlugins,
+        xr_controllers::{
+            default_bindings::SuisXrControllerDefaultBindingsPlugin,
+            interaction_profiles::{SupportedInteractionProfile, SupportedInteractionProfiles},
+        },
+    },
+    field::Field,
+    handler_actions::single::SingleHandlerAction,
+    input_handler::{FieldRef, InputHandler},
+    input_method_data::SpatialInputData,
 };
 use openxr::ReferenceSpaceType;
 
-// TODO: improve capturing mechanism
 fn main() -> AppExit {
     App::new()
-        .add_plugins(add_xr_plugins(
-            DefaultPlugins.build().disable::<PipelinedRenderingPlugin>(),
-        ))
+        .add_plugins(
+            add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>()).set(
+                OxrReferenceSpacePlugin {
+                    default_primary_ref_space: ReferenceSpaceType::LOCAL,
+                },
+            ),
+        )
         .add_plugins((
             SuisXrControllerDefaultBindingsPlugin {
                 supported_interaction_profiles: SupportedInteractionProfiles(HashSet::from_iter([
                     SupportedInteractionProfile::OculusTouch,
                 ])),
             },
+            SuisPlugins,
             SuisDebugGizmosPlugin,
             HandGizmosPlugin,
+            SuisBundledInputMethodPlugins,
         ))
         .add_systems(Startup, setup)
         .add_systems(XrSessionCreated, make_spectator_cam_follow)
@@ -45,64 +60,63 @@ fn update_camera(mut cams: Query<&mut Transform, (With<Camera>, Without<XrCamera
     }
 }
 
-#[derive(Clone, Copy, Component)]
-#[require(SimpleHandlerAction)]
-struct Grabble;
-
-#[derive(Clone, Copy, Component)]
-struct Grabbed(Transform);
+#[derive(Clone, Copy, Component, Default)]
+#[require(SingleHandlerAction)]
+struct Grabbable(Option<Isometry3d>);
 
 fn move_grabble(
-    mut grabbles: Query<
-        (
-            Entity,
-            &GlobalTransform,
-            &mut Transform,
-            Option<&mut Grabbed>,
-            Option<&ChildOf>,
-        ),
-        With<Grabble>,
-    >,
-    transform_query: Query<&GlobalTransform>,
-    mut cmds: Commands,
+    mut grabbles: Query<(
+        &mut InputHandler,
+        &mut Transform,
+        &mut SingleHandlerAction,
+        &mut Grabbable,
+    )>,
 ) {
-    for (handler_entity, handler, handler_gt, mut handler_transform, grabbed, parent) in
-        &mut grabbles
-    {
-        let Some((method_transform, data, ranged)) = handler
-            .captured_methods
-            .first()
-            .copied()
-            .and_then(|v| method_query.get(v).ok())
-        else {
-            cmds.entity(handler_entity).remove::<Grabbed>();
-            continue;
-        };
-        let grabbing = data.grab > 0.8;
-        match (grabbed.is_some(), grabbing) {
-            (false, true) => {
-                cmds.entity(handler_entity)
-                    .insert(Grabbed(Transform::from_matrix(
-                        method_transform.compute_matrix().inverse() * handler_gt.compute_matrix(),
-                    )));
-            }
-            (true, false) => {
-                cmds.entity(handler_entity).remove::<Grabbed>();
-            }
-            _ => {}
+    for (mut handler, mut handler_transform, mut handler_action, mut grabbable) in &mut grabbles {
+        handler_action.update(
+            &mut handler,
+            false,
+            |data| data.distance <= 0.01,
+            |data| data.non_spatial_data.grab > 0.8,
+        );
+        if handler_action.stopped_acting() {
+            info!("stopped");
+            grabbable.0.take();
         }
-        if let Some(mut t) = grabbed {
-            let w = parent
-                .and_then(|v| parent_query.get(v.get()).ok())
-                .copied()
-                .unwrap_or(GlobalTransform::IDENTITY);
-            if ranged {
-                t.0.translation.z -= data.scroll.unwrap_or_default().y;
-            }
-            *handler_transform = Transform::from_matrix(
-                method_transform.mul_transform(t.0).compute_matrix() * w.compute_matrix().inverse(),
-            );
+        if let Some(actor) = handler_action
+            .started_acting()
+            .then(|| handler_action.actor(&handler))
+            .flatten()
+        {
+            info!("started");
+            let iso = iso_from_spatial_data(actor.spatial_data);
+            grabbable.0.replace(iso);
         }
+        if let (Some(grab_actor_location), Some(actor)) =
+            (grabbable.0.as_mut(), handler_action.actor(&handler))
+        {
+            // let offset = match actor.spatial_data {
+            //     SpatialInputData::Hand(_) | SpatialInputData::Tip(_) => Vec3A::ZERO,
+            //     SpatialInputData::Ray(_) => {
+            //         Vec3A::NEG_Z * actor.non_spatial_data.scroll.unwrap_or_default().y
+            //     }
+            // };
+            let curr_actor_location = iso_from_spatial_data(actor.spatial_data);
+            let scale = handler_transform.scale;
+            let actor_relative_to_parent = handler_transform.to_isometry() * curr_actor_location;
+            let idk = actor_relative_to_parent * grab_actor_location.inverse();
+            *handler_transform = Transform::from_isometry(idk).with_scale(scale);
+        }
+    }
+}
+
+fn iso_from_spatial_data(spatial_data: SpatialInputData) -> Isometry3d {
+    match spatial_data {
+        SpatialInputData::Hand(hand) => Isometry3d::new(hand.palm.pos, hand.palm.rot),
+        SpatialInputData::Tip(iso) => iso,
+        SpatialInputData::Ray(ray) => Transform::from_translation(ray.origin)
+            .looking_to(ray.direction, Dir3::Y)
+            .to_isometry(),
     }
 }
 
@@ -117,15 +131,15 @@ fn make_spectator_cam_follow(
     let space = session
         .create_reference_space(ReferenceSpaceType::VIEW, Transform::IDENTITY)
         .unwrap();
-    cmds.entity(query.single()).insert(space.0);
+    cmds.entity(query.single().unwrap()).insert(space.0);
 }
 
 fn setup(mut cmds: Commands) {
     cmds.spawn((
-        InputHandler::new(),
+        InputHandler::new(FieldRef::This),
         Field::Sphere(0.2),
-        Transform::from_xyz(0.0, 0.5, -0.5),
-        Grabble,
+        Transform::from_xyz(0.0, -1.0, -0.5),
+        Grabbable::default(),
     ));
     cmds.spawn((
         Camera3d::default(),
@@ -135,26 +149,4 @@ fn setup(mut cmds: Commands) {
         }),
         Cam,
     ));
-}
-
-fn capture_condition(
-    ctx: In<CaptureContext>,
-    query: Query<&NonSpatialInputData>,
-    handler_query: Query<&InputHandlerCaptures>,
-) -> bool {
-    // Only Capture one method
-    if !handler_query
-        .get(ctx.handler)
-        .is_ok_and(|v| v.captured_methods.is_empty())
-    {
-        return false;
-    }
-
-    let Ok(data) = query.get(ctx.input_method) else {
-        return false;
-    };
-    if ctx.distance <= 0.01 {
-        return data.grab > 0.8;
-    }
-    false
 }

@@ -48,7 +48,7 @@ fn update_active(
                 e,
                 flags
                     .iter()
-                    .any(|f| f.position_tracked && f.rotation_tracked),
+                    .all(|f| f.position_tracked && f.rotation_tracked),
                 disabled,
             );
         } else {
@@ -210,7 +210,7 @@ impl Joint {
         let (_, rot, pos) = transform.to_scale_rotation_translation();
         Self {
             pos,
-            ori: rot,
+            rot,
             radius: radius.0,
         }
     }

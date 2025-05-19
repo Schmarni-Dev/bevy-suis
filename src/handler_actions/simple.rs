@@ -7,6 +7,7 @@ use super::DeltaEntitySet;
 #[derive(Component, Default, Debug)]
 pub struct SimpleHandlerAction {
     actors: DeltaEntitySet,
+    wanted_actors: DeltaEntitySet,
 }
 
 impl SimpleHandlerAction {
@@ -15,20 +16,27 @@ impl SimpleHandlerAction {
         handler: &mut InputHandler,
         capture_condition: impl Fn(&InputData) -> bool,
     ) {
-        self.actors.update(
+        self.wanted_actors.update(
             handler
                 .input_events()
                 .iter()
                 .filter(|event| capture_condition(event))
                 .map(|event| event.input_method),
         );
-        for method in self.actors.added() {
+        for method in self.wanted_actors.added() {
             handler.request_capture(*method);
         }
-        for method in self.actors.removed() {
+        for method in self.wanted_actors.removed() {
             // only releases when actually captured by this handler
             handler.release(*method);
         }
+        self.actors.update(
+            handler
+                .input_events()
+                .iter()
+                .filter(|event| event.captured)
+                .map(|event| event.input_method),
+        );
     }
     pub fn actor_set(&self) -> &DeltaEntitySet {
         &self.actors

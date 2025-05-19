@@ -14,16 +14,11 @@ impl Plugin for SuisDebugGizmosPlugin {
 }
 
 fn draw_method_gizmos(
-    method_query: Query<(
-        &GlobalTransform,
-        &InputMethod,
-        &SpatialInputData,
-        Has<InputMethodDisabled>,
-    )>,
+    method_query: Query<(&InputMethod, &SpatialInputData, Has<InputMethodDisabled>)>,
     mut gizmos: Gizmos,
 ) {
-    for (transform, method, input, disabled) in &method_query {
-        let color = match (!disabled, method.captured_by.is_some()) {
+    for (method, input, disabled) in &method_query {
+        let color = match (!disabled, method.captured_by().is_some()) {
             (true, true) => css::LIME,
             (true, false) => css::BLUE,
             (false, _) => css::LIGHT_GRAY,
@@ -33,7 +28,7 @@ fn draw_method_gizmos(
             SpatialInputData::Hand(_) => {}
             SpatialInputData::Tip(isometry) => {
                 let t = Transform::from_isometry(*isometry);
-                let base = t.with_translation(transform.transform_point(Vec3::Z * 0.02));
+                let base = t.with_translation(t.transform_point(Vec3::Z * 0.02));
 
                 gizmos.circle(base.to_isometry(), 0.01, color);
                 gizmos.line(base.transform_point(Vec3::X * 0.01), t.translation, color);

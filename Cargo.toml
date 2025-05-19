@@ -9,7 +9,7 @@ default = ["xr"]
 xr = []
 
 [dependencies]
-bevy = "0.16"
+bevy = { version = "0.16", features = ["track_location"] }
 bevy_mod_xr = "0.3"
 schminput = { version = "0.3", features = ["xr"] }
 

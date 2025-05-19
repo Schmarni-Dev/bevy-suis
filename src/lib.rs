@@ -24,7 +24,8 @@ impl Plugin for SuisCorePlugin {
                 SuisPreUpdateSets::UpdateInputMethods,
                 SuisPreUpdateSets::CaptureInputMethods,
                 SuisPreUpdateSets::SendInputData,
-            ),
+            )
+                .chain(),
         );
     }
 }
