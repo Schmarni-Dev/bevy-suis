@@ -80,7 +80,7 @@ fn move_grabble(
             |data| data.non_spatial_data.grab > 0.8,
         );
         if handler_action.stopped_acting() {
-            info!("stopped");
+            debug!("stopped");
             grabbable.0.take();
         }
         if let Some(actor) = handler_action
@@ -88,24 +88,25 @@ fn move_grabble(
             .then(|| handler_action.actor(&handler))
             .flatten()
         {
-            info!("started");
+            debug!("started");
             let iso = iso_from_spatial_data(actor.spatial_data);
             grabbable.0.replace(iso);
         }
         if let (Some(grab_actor_location), Some(actor)) =
             (grabbable.0.as_mut(), handler_action.actor(&handler))
         {
-            // let offset = match actor.spatial_data {
-            //     SpatialInputData::Hand(_) | SpatialInputData::Tip(_) => Vec3A::ZERO,
-            //     SpatialInputData::Ray(_) => {
-            //         Vec3A::NEG_Z * actor.non_spatial_data.scroll.unwrap_or_default().y
-            //     }
-            // };
+            let offset = match actor.spatial_data {
+                SpatialInputData::Hand(_) | SpatialInputData::Tip(_) => Vec3A::ZERO,
+                SpatialInputData::Ray(_) => {
+                    Vec3A::NEG_Z * actor.non_spatial_data.scroll.unwrap_or_default().y
+                }
+            };
             let curr_actor_location = iso_from_spatial_data(actor.spatial_data);
-            let scale = handler_transform.scale;
             let actor_relative_to_parent = handler_transform.to_isometry() * curr_actor_location;
-            let idk = actor_relative_to_parent * grab_actor_location.inverse();
-            *handler_transform = Transform::from_isometry(idk).with_scale(scale);
+            let idk = actor_relative_to_parent
+                * Isometry3d::from_translation(offset)
+                * grab_actor_location.inverse();
+            *handler_transform = Transform::from_isometry(idk).with_scale(handler_transform.scale);
         }
     }
 }
