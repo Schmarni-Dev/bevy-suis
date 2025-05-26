@@ -1,5 +1,5 @@
 use bevy::{color::palettes::css, prelude::*};
-use bevy_suis::{debug::SuisDebugGizmosPlugin, Field, SuisCorePlugin};
+use bevy_suis::{debug::SuisDebugGizmosPlugin, field::Field, SuisCorePlugin};
 fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -31,7 +31,7 @@ fn move_pointer(
     mut pointer: Query<&mut Transform, With<Pointer>>,
     time: Res<Time>,
 ) {
-    let mut p = pointer.single_mut();
+    let mut p = pointer.single_mut().unwrap();
     if keys.pressed(KeyCode::KeyW) {
         p.translation.z += time.delta_secs() * -2.0;
     }
@@ -57,7 +57,7 @@ fn draw_things(
     field_query: Query<(&GlobalTransform, &Field)>,
     pointer_query: Query<&GlobalTransform, With<Pointer>>,
 ) {
-    let pointer = pointer_query.single();
+    let pointer = pointer_query.single().unwrap();
     for (f_pose, field) in &field_query {
         let pos = f_pose.translation();
         let closest_point = field.closest_point(f_pose, pointer.translation());
