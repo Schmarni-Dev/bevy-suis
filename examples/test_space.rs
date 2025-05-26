@@ -15,9 +15,17 @@ pub struct Pointer;
 
 fn setup(mut cmds: Commands) {
     cmds.spawn(Pointer);
-    cmds.spawn((Field::Sphere(0.5), Transform::from_xyz(0.0, -1.0, -5.)));
+    // cmds.spawn((Field::Sphere(0.5), Transform::from_xyz(0.0, -1.0, -5.)));
+    // cmds.spawn((
+    //     Field::Cuboid(Cuboid::new(1., 2., 3.)),
+    //     Transform::from_xyz(0.0, -1.0, 0.0),
+    // ));
+    // cmds.spawn((
+    //     Field::Torus(Torus::new(0.3, 0.5)),
+    //     Transform::from_xyz(0.0, -1.0, 0.0),
+    // ));
     cmds.spawn((
-        Field::Cuboid(Cuboid::new(1., 2., 3.)),
+        Field::Cylinder(Cylinder::new(0.3, 0.5)),
         Transform::from_xyz(0.0, -1.0, 0.0),
     ));
     cmds.spawn((

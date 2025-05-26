@@ -49,10 +49,15 @@ fn draw_fields(field_query: Query<(&GlobalTransform, &Field)>, mut gizmos: Gizmo
             Field::Sphere(r) => {
                 gizmos.sphere(transform.to_isometry(), *r, css::LIME);
             }
-            Field::Cuboid(cuboid) => gizmos.cuboid(
-                transform.mul_transform(Transform::from_scale(cuboid.half_size * 2.0)),
-                css::LIME,
-            ),
+            Field::Cuboid(cuboid) => {
+                gizmos.primitive_3d(cuboid, transform.to_isometry(), css::LIME)
+            }
+            Field::Torus(torus) => {
+                gizmos.primitive_3d(torus, transform.to_isometry(), css::LIME);
+            }
+            Field::Cylinder(cylinder) => {
+                gizmos.primitive_3d(cylinder, transform.to_isometry(), css::LIME);
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 use bevy::{
-    math::{vec3a, Vec3A},
+    math::{Vec3A, vec3a},
     prelude::*,
 };
 
@@ -18,6 +18,8 @@ pub struct RayMarchResult {
 pub enum Field {
     Sphere(f32),
     Cuboid(Cuboid),
+    Torus(Torus),
+    Cylinder(Cylinder),
 }
 impl Field {
     pub fn closest_point(
@@ -59,6 +61,17 @@ impl Field {
                 );
                 let v = Vec3::new(q.x.max(0_f32), q.y.max(0_f32), q.z.max(0_f32));
                 v.length() + q.x.max(q.y.max(q.z)).min(0_f32)
+            }
+            Field::Torus(torus) => {
+                let q = vec2(p.xz().length() - torus.major_radius, p.y);
+                q.length() - torus.minor_radius
+            }
+            Field::Cylinder(cylinder) => {
+                let d = vec2(
+                    p.xz().length().abs() - cylinder.radius,
+                    p.y.abs() - cylinder.half_height,
+                );
+                d.x.max(d.y).min(0.0) + d.max(vec2(0.0, 0.0)).length()
             }
         }
     }
