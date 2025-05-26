@@ -17,9 +17,11 @@ impl MultiHandlerAction {
         hover_condition: impl Fn(&InputData) -> bool,
         interact_condition: impl Fn(&InputData) -> bool,
     ) {
-        self.simple.update(handler, |data| {
-            self.hovering.current().contains(&data.input_method) && interact_condition(data)
-        });
+        self.simple.update(
+            handler,
+            interact_condition,
+            Some(|e| self.hovering.current().contains(&e) && !self.hovering.added().contains(&e)),
+        );
         self.hovering.update(
             handler
                 .input_events()

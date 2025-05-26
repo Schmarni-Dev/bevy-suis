@@ -1,4 +1,4 @@
-use bevy::ecs::component::Component;
+use bevy::ecs::{component::Component, entity::Entity};
 
 use crate::{input_handler::InputHandler, input_method_data::InputData};
 
@@ -15,6 +15,7 @@ impl SimpleHandlerAction {
         &mut self,
         handler: &mut InputHandler,
         capture_condition: impl Fn(&InputData) -> bool,
+        capture_request_condition: Option<impl Fn(Entity) -> bool>,
     ) {
         self.wanted_actors.update(
             handler
@@ -23,7 +24,15 @@ impl SimpleHandlerAction {
                 .filter(|event| capture_condition(event))
                 .map(|event| event.input_method),
         );
-        for method in self.wanted_actors.added() {
+        for method in self
+            .wanted_actors
+            .added()
+            .iter()
+            .filter(|e| match capture_request_condition.as_ref() {
+                Some(f) => f(**e),
+                None => true,
+            })
+        {
             handler.request_capture(*method);
         }
         for method in self.wanted_actors.removed() {

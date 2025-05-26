@@ -139,7 +139,7 @@ fn setup(mut cmds: Commands) {
     cmds.spawn((
         InputHandler::new(FieldRef::This),
         Field::Sphere(0.2),
-        Transform::from_xyz(0.0, -1.0, -0.5),
+        Transform::from_xyz(0.0, 0.5, -0.5),
         Grabbable::default(),
     ));
     cmds.spawn((

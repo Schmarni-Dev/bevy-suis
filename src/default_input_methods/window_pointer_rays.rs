@@ -1,4 +1,7 @@
+use std::cmp::Ordering;
+
 use bevy::{
+    ecs::{component::HookContext, world::DeferredWorld},
     input::mouse::MouseWheel,
     prelude::*,
     render::camera::RenderTarget,
@@ -9,36 +12,44 @@ use crate::{
     InputMethodDisabled, SuisPreUpdateSets,
     input_method::InputMethod,
     input_method_data::{NonSpatialInputData, SpatialInputData},
+    order_helper::InputHandlerQueryHelper,
 };
 
-pub struct SuisWindowPointerPlugin;
+pub struct SuisWindowPointerRayPlugin;
 
-impl Plugin for SuisWindowPointerPlugin {
+impl Plugin for SuisWindowPointerRayPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SuisMouseConfig>();
         app.add_systems(
             PreUpdate,
             (update_input_method_ray, update_mouse_data)
+                .chain()
                 .in_set(SuisPreUpdateSets::UpdateInputMethods),
         );
-        app.add_systems(PreStartup, manually_spawn_methods);
-        app.add_observer(spawn_input_methods);
-        app.add_observer(despawn_input_methods);
-        app.add_observer(despawn_input_method_on_ref_remove);
+        app.add_systems(
+            PreUpdate,
+            spawn_cursors.before(SuisPreUpdateSets::PrepareMethodEvents),
+        );
     }
 }
 
-fn manually_spawn_methods(
+fn spawn_cursors(
     query: Query<Entity, (With<Window>, Without<SuisWindowCursor>)>,
     mut cmds: Commands,
 ) {
-    for e in &query {
-        spawn_method_on_entity(&mut cmds, e);
+    for e in query {
+        cmds.entity(e).insert(SuisWindowCursor(Entity::PLACEHOLDER));
     }
 }
 
-fn spawn_method_on_entity(cmds: &mut Commands, e: Entity) {
-    let method = cmds
+#[derive(Clone, Copy, Component, Debug)]
+#[component(on_add = spawn_cursor_method)]
+#[component(on_remove = despawn_cursor_method)]
+struct SuisWindowCursor(Entity);
+
+fn spawn_cursor_method(mut world: DeferredWorld, ctx: HookContext) {
+    let method = world
+        .commands()
         .spawn((
             InputMethod::new(),
             SpatialInputData::Ray(Ray3d::new(Vec3::ZERO, Dir3::NEG_Z)),
@@ -46,55 +57,17 @@ fn spawn_method_on_entity(cmds: &mut Commands, e: Entity) {
             NonSpatialInputData::default(),
         ))
         .id();
-    cmds.entity(e).insert(SuisWindowCursor(method));
+    world
+        .commands()
+        .entity(ctx.entity)
+        .insert(SuisWindowCursor(method));
 }
-
-fn despawn_input_method_on_ref_remove(
-    t: Trigger<OnRemove, SuisWindowCursor>,
-    mut cmds: Commands,
-    has: Query<&SuisWindowCursor>,
-) {
-    if t.target() == Entity::PLACEHOLDER {
-        warn_once!("OnRemove Called with Placeholder entity?!");
-        return;
+fn despawn_cursor_method(mut world: DeferredWorld, ctx: HookContext) {
+    if let Some(SuisWindowCursor(method)) =
+        world.entity(ctx.entity).get::<SuisWindowCursor>().copied()
+    {
+        world.commands().entity(method).despawn();
     }
-    let Ok(cursor) = has.get(t.target()) else {
-        warn!("very confused rn?!?!?!?!");
-        return;
-    };
-    cmds.entity(cursor.0).despawn();
-}
-
-fn despawn_input_methods(
-    t: Trigger<OnRemove, Window>,
-    mut cmds: Commands,
-    has: Query<&SuisWindowCursor>,
-) {
-    if t.target() == Entity::PLACEHOLDER {
-        warn_once!("OnRemove Called with Placeholder entity?!");
-        return;
-    }
-    let Ok(cursor) = has.get(t.target()) else {
-        warn!("Removing Window without Input method?");
-        return;
-    };
-    cmds.entity(cursor.0).despawn();
-    cmds.entity(t.target()).remove::<SuisWindowCursor>();
-}
-fn spawn_input_methods(
-    t: Trigger<OnAdd, Window>,
-    mut cmds: Commands,
-    has: Query<Has<SuisWindowCursor>>,
-) {
-    info!("spawn");
-    if t.target() == Entity::PLACEHOLDER {
-        warn_once!("OnAdd Called with Placeholder entity?!");
-        return;
-    }
-    if has.get(t.target()).unwrap_or(false) {
-        warn!("New Window already has a Suis Cursor?!?! how?!");
-    }
-    spawn_method_on_entity(&mut cmds, t.target());
 }
 
 #[derive(Clone, Copy, Component, Debug, Default)]
@@ -116,10 +89,18 @@ impl Default for SuisMouseConfig {
 
 // doesn't handle multiple windows correctly
 fn update_mouse_data(
-    mut query: Query<&mut NonSpatialInputData, (With<InputMethod>, With<MouseInputMethod>)>,
+    mut query: Query<
+        (
+            &mut NonSpatialInputData,
+            &mut InputMethod,
+            &SpatialInputData,
+        ),
+        With<MouseInputMethod>,
+    >,
     mut scroll: EventReader<MouseWheel>,
     buttons: Res<ButtonInput<MouseButton>>,
     config: Res<SuisMouseConfig>,
+    handler_query: InputHandlerQueryHelper,
 ) {
     let mut discrete = Vec2::ZERO;
     let mut continuous = Vec2::ZERO;
@@ -135,7 +116,7 @@ fn update_mouse_data(
             }
         }
     }
-    for mut data in query.iter_mut() {
+    for (mut data, mut input_method, spatial_data) in query.iter_mut() {
         data.select = buttons.pressed(MouseButton::Left) as u8 as f32;
         data.context = buttons.pressed(MouseButton::Middle) as u8 as f32;
         data.secondary = buttons.pressed(MouseButton::Right) as u8 as f32;
@@ -143,6 +124,14 @@ fn update_mouse_data(
         data.scroll = Some(
             (discrete * config.discrete_multiplier) + (continuous * config.continuous_multiplier),
         );
+        let mut handlers =
+            handler_query.query_all_handler_fields(|(handler, field, field_transform)| {
+                (handler, spatial_data.distance(field, field_transform))
+            });
+
+        handlers.sort_by(|(_, d1), (_, d2)| d1.partial_cmp(d2).unwrap_or(Ordering::Equal));
+        let handlers = handlers.into_iter().map(|(e, _)| e).collect();
+        input_method.set_handler_order(handlers);
     }
 }
 
@@ -151,11 +140,7 @@ fn update_input_method_ray(
     cams: Query<(&Camera, &GlobalTransform)>,
     windows: Query<(&Window, &SuisWindowCursor)>,
     mut input_method: Query<
-        (
-            &mut SpatialInputData,
-            &mut Transform,
-            Has<InputMethodDisabled>,
-        ),
+        (&mut SpatialInputData, Has<InputMethodDisabled>),
         With<MouseInputMethod>,
     >,
     mut cmds: Commands,
@@ -178,7 +163,7 @@ fn update_input_method_ray(
             error_once!("Invalid window entity!");
             continue;
         };
-        let Ok((mut method, mut transform, disabled)) = input_method.get_mut(suis_cursor.0) else {
+        let Ok((mut method, disabled)) = input_method.get_mut(suis_cursor.0) else {
             error!("unable to get input method for window");
             continue;
         };
@@ -189,8 +174,6 @@ fn update_input_method_ray(
             if let Some(pos) = get_viewport_pos(pos, camera) {
                 if let Ok(ray) = camera.viewport_to_world(cam_transform, pos) {
                     *method = SpatialInputData::Ray(ray);
-                    transform.translation = ray.origin;
-                    transform.look_at(ray.origin + *ray.direction, cam_transform.up());
                 }
             }
         } else if !disabled {
@@ -198,9 +181,6 @@ fn update_input_method_ray(
         }
     }
 }
-
-#[derive(Clone, Copy, Component, Debug)]
-struct SuisWindowCursor(Entity);
 
 fn get_viewport_pos(logical_pos: Vec2, cam: &Camera) -> Option<Vec2> {
     if let Some(viewport_rect) = cam.logical_viewport_rect() {
@@ -212,6 +192,3 @@ fn get_viewport_pos(logical_pos: Vec2, cam: &Camera) -> Option<Vec2> {
         Some(logical_pos)
     }
 }
-
-#[derive(Clone, Copy, Component, Debug)]
-pub struct WindowPointerInputMethodData {}
