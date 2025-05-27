@@ -31,7 +31,7 @@ impl Field {
         point - self.normal(field_transform, point) * self.distance(field_transform, point)
     }
     /// point should be in world-space
-    pub fn normal(&self, field_transform: &GlobalTransform, point: impl Into<Vec3A>) -> Vec3A {
+    pub fn normal(&self, field_transform: &GlobalTransform, point: impl Into<Vec3A>) -> Dir3A {
         let point = point.into();
         let distance_vec = Vec3A::splat(self.distance(field_transform, point));
         const R: f32 = 0.0001;
@@ -41,10 +41,7 @@ impl Field {
             self.distance(field_transform, point + vec3a(0.0, 0.0, R)),
         );
         let local_normal = distance_vec - r_vec;
-        -field_transform
-            .affine()
-            .transform_vector3a(local_normal)
-            .normalize()
+        Dir3A::new(-field_transform.affine().transform_vector3a(local_normal)).unwrap()
     }
     /// point should be in world-space
     pub fn distance(&self, field_transform: &GlobalTransform, point: impl Into<Vec3A>) -> f32 {

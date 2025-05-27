@@ -51,6 +51,38 @@ impl SpatialInputData {
             SpatialInputData::Ray(ray) => field.raymarch(field_transform, *ray).closest_distance,
         }
     }
+    pub fn closest_point(&self, field: &Field, field_transform: &GlobalTransform) -> Vec3A {
+        match self {
+            SpatialInputData::Hand(hand) => hand.closest_point(field, field_transform),
+            SpatialInputData::Tip(isometry) => {
+                field.closest_point(field_transform, isometry.translation)
+            }
+            SpatialInputData::Ray(ray) => field.closest_point(
+                field_transform,
+                ray.get_point(
+                    field
+                        .raymarch(field_transform, *ray)
+                        .deepest_point_ray_length,
+                ),
+            ),
+        }
+    }
+    pub fn normal(&self, field: &Field, field_transform: &GlobalTransform) -> Dir3A {
+        match self {
+            SpatialInputData::Hand(hand) => hand.normal(field, field_transform),
+            SpatialInputData::Tip(isometry) => {
+                field.normal(field_transform, isometry.translation)
+            }
+            SpatialInputData::Ray(ray) => field.normal(
+                field_transform,
+                ray.get_point(
+                    field
+                        .raymarch(field_transform, *ray)
+                        .deepest_point_ray_length,
+                ),
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

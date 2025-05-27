@@ -1,5 +1,5 @@
 use bevy::{
-    math::{Mat4, Quat, Vec3},
+    math::{Dir3A, Mat4, Quat, Vec3, Vec3A},
     prelude::{GlobalTransform, TransformPoint as _},
     reflect::Reflect,
 };
@@ -175,6 +175,44 @@ impl Hand {
         .map(|tip| field.distance(field_transform, tip.pos))
         .into_iter()
         .reduce(f32::min)
+        .unwrap()
+    }
+    pub fn closest_point(&self, field: &Field, field_transform: &GlobalTransform) -> Vec3A {
+        [
+            self.thumb.tip,
+            self.index.tip,
+            self.middle.tip,
+            self.ring.tip,
+            self.little.tip,
+        ]
+        .map(|tip| {
+            (
+                field.distance(field_transform, tip.pos),
+                field.closest_point(field_transform, tip.pos),
+            )
+        })
+        .into_iter()
+        .reduce(|(v1, p1), (v2, p2)| if v1 < v2 { (v1, p1) } else { (v2, p2) })
+        .map(|(_, p)| p)
+        .unwrap()
+    }
+    pub fn normal(&self, field: &Field, field_transform: &GlobalTransform) -> Dir3A {
+        [
+            self.thumb.tip,
+            self.index.tip,
+            self.middle.tip,
+            self.ring.tip,
+            self.little.tip,
+        ]
+        .map(|tip| {
+            (
+                field.distance(field_transform, tip.pos),
+                field.normal(field_transform, tip.pos),
+            )
+        })
+        .into_iter()
+        .reduce(|(v1, p1), (v2, p2)| if v1 < v2 { (v1, p1) } else { (v2, p2) })
+        .map(|(_, p)| p)
         .unwrap()
     }
 }
