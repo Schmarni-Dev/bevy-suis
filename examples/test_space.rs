@@ -1,5 +1,5 @@
 use bevy::{color::palettes::css, prelude::*};
-use bevy_suis::{debug::SuisDebugGizmosPlugin, field::Field, SuisCorePlugin};
+use bevy_suis::{SuisCorePlugin, debug::SuisDebugGizmosPlugin, field::Field};
 fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
@@ -71,7 +71,7 @@ fn draw_things(
         let closest_point = field.closest_point(f_pose, pointer.translation());
         let normal = field.normal(f_pose, pointer.translation());
         let distance = field.distance(f_pose, pointer.translation());
-        giz.line(pos, pos + Vec3::from(normal), css::GOLD);
+        giz.line(pos, pos + Vec3::from(Vec3A::from(normal)), css::GOLD);
         giz.line(pos, pos + (Vec3::Y * distance), css::RED);
         giz.sphere(
             Isometry3d::from_translation(closest_point),
