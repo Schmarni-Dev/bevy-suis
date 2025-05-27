@@ -44,6 +44,7 @@ impl SimpleHandlerAction {
                 .input_events()
                 .iter()
                 .filter(|event| event.captured)
+                .filter(|event| self.wanted_actors.current().contains(&event.input_method))
                 .map(|event| event.input_method),
         );
     }
