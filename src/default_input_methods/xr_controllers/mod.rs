@@ -29,7 +29,11 @@ pub struct SuisBundledXrControllerInputMethodPlugin;
 
 impl Plugin for SuisBundledXrControllerInputMethodPlugin {
     fn build(&self, app: &mut App) {
-        if *app.world().resource::<XrState>() == XrState::Unavailable {
+        if app
+            .world()
+            .get_resource::<XrState>()
+            .is_none_or(|v| *v == XrState::Unavailable)
+        {
             return;
         }
         if !app.is_plugin_added::<SchminputPlugin>() {
