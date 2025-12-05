@@ -5,7 +5,7 @@ use bevy::{
 };
 
 use crate::{
-    SuisPreUpdateSets,
+    InputMethodDisabled, SuisPreUpdateSets,
     field::Field,
     input_handler::{FieldRef, InputHandler},
     input_method::InputMethod,
@@ -146,7 +146,7 @@ fn capture_input_methods(
 fn transfer_input_method_events(
     mut cmds: Commands,
     mut handlers: Query<(Entity, &mut InputHandler)>,
-    mut methods: Query<(Entity, &mut InputMethod)>,
+    mut methods: Query<(Entity, &mut InputMethod, Has<InputMethodDisabled>)>,
 ) {
     let mut event_map = EntityHashMap::<InputMethodCaptureRequests>::default();
     for (entity, mut handler) in &mut handlers {
@@ -160,7 +160,7 @@ fn transfer_input_method_events(
                         .insert(entity);
                 }
                 InputMethodMessage::Release => {
-                    let (_, mut method) = match methods.get_mut(method) {
+                    let (_, mut method, _) = match methods.get_mut(method) {
                         Ok(v) => v,
                         Err(err) => {
                             error!("Tried to Release an invalid Input Method: {method:?}: {err}");
@@ -174,7 +174,7 @@ fn transfer_input_method_events(
             }
         }
     }
-    for (method, _) in &methods {
+    for (method, _, _) in &methods {
         let Some(requests) = event_map.remove(&method) else {
             cmds.entity(method).remove::<InputMethodCaptureRequests>();
             continue;
