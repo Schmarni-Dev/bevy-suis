@@ -3,8 +3,6 @@ use bevy::{
     prelude::{GlobalTransform, TransformPoint as _},
     reflect::Reflect,
 };
-#[cfg(feature = "xr")]
-use bevy_mod_xr::hands::HandBone;
 
 use crate::field::Field;
 
@@ -72,11 +70,11 @@ pub struct Hand {
 
 impl Hand {
     pub fn pinch(&self, relative_to: &GlobalTransform) -> f32 {
-        self.pinch_between(HandBone::ThumbTip, HandBone::IndexTip, relative_to)
+        self.pinch_between(HandJoint::ThumbTip, HandJoint::IndexTip, relative_to)
     }
 
     pub fn grab(&self, relative_to: &GlobalTransform) -> f32 {
-        self.pinch_between(HandBone::RingTip, HandJoint::RingMetacarpal, relative_to)
+        self.pinch_between(HandJoint::RingTip, HandJoint::RingMetacarpal, relative_to)
     }
 
     pub fn pinch_between(
@@ -350,4 +348,4 @@ pub enum HandJoint {
     LittleTip = 25,
 }
 #[cfg(feature = "xr")]
-pub type HandJoint = HandBone;
+pub type HandJoint = bevy_mod_xr::hands::HandBone;
