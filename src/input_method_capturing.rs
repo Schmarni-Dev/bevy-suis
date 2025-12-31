@@ -107,7 +107,7 @@ fn get_data_for_handler(
     field_query: Query<(&Field, &GlobalTransform)>,
     creation_fn: impl FnOnce(Mat4, &Field, &GlobalTransform) -> InputData,
 ) -> Option<InputData> {
-    let global_to_handler = handler_transform.compute_matrix().inverse();
+    let global_to_handler = handler_transform.to_matrix().inverse();
     let field_entity = match input_handler.get_field_ref() {
         FieldRef::This => handler,
         FieldRef::Entity(entity) => entity,

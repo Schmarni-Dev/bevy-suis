@@ -9,12 +9,12 @@ default = ["xr"]
 xr = []
 
 [dependencies]
-bevy = { version = "0.16", features = ["track_location"] }
-bevy_mod_xr = "0.3"
-schminput = { version = "0.3", features = ["xr"] }
+bevy = { version = "0.17", features = ["track_location"] }
+bevy_mod_xr = "0.4"
+schminput = { version = "0.4", features = ["xr"] }
 
 [dev-dependencies]
-bevy_mod_openxr = "0.3"
+bevy_mod_openxr = "0.4"
 openxr = "0.19"
 
 [lints.clippy]

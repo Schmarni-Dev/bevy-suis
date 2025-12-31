@@ -13,9 +13,9 @@ use bevy_mod_xr::{
     session::{XrPreDestroySession, XrSessionCreated, XrState},
     spaces::{XrSpaceLocationFlags, XrSpaceSyncSet},
 };
-use schminput::openxr::OxrInputPlugin;
-use schminput::xr::AttachSpaceToEntity;
-use schminput::{SchminputPlugin, SchminputSet, prelude::*};
+use schminput::{
+    SchminputPlugin, SchminputSystems, openxr::OxrInputPlugin, prelude::*, xr::AttachSpaceToEntity,
+};
 
 use crate::{
     InputMethodDisabled,
@@ -52,7 +52,7 @@ impl Plugin for SuisBundledXrControllerInputMethodPlugin {
                 update_handler_order,
             )
                 .chain()
-                .after(SchminputSet::SyncInputActions)
+                .after(SchminputSystems::SyncInputActions)
                 .after(XrSpaceSyncSet)
                 .in_set(crate::SuisPreUpdateSets::UpdateInputMethods),
         );

@@ -101,8 +101,8 @@ impl Hand {
         pinch_max: f32,
         relative_to: &GlobalTransform,
     ) -> f32 {
-        let joint_1 = mul_joint(&relative_to.compute_matrix(), self.get_joint(joint_1));
-        let joint_2 = mul_joint(&relative_to.compute_matrix(), self.get_joint(joint_2));
+        let joint_1 = mul_joint(&relative_to.to_matrix(), self.get_joint(joint_1));
+        let joint_2 = mul_joint(&relative_to.to_matrix(), self.get_joint(joint_2));
         let combined_radius = joint_1.radius + joint_2.radius;
         let pinch_dist = joint_1.pos.distance(joint_2.pos) - combined_radius;
         (1.0 - ((pinch_dist - activation_distance) / (pinch_max - activation_distance)))
@@ -227,7 +227,7 @@ impl HandInputMethodData {
     }
 
     pub fn get_in_relative_space(&self, relative_to: &GlobalTransform) -> Hand {
-        let mat = &relative_to.compute_matrix().inverse();
+        let mat = &relative_to.to_matrix().inverse();
         Hand {
             thumb: Thumb {
                 tip: mul_joint(mat, self.0.thumb.tip),

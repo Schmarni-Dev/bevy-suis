@@ -130,7 +130,7 @@ fn make_spectator_cam_follow(
     session: Res<OxrSession>,
 ) {
     let space = session
-        .create_reference_space(ReferenceSpaceType::VIEW, Transform::IDENTITY)
+        .create_reference_space(ReferenceSpaceType::VIEW, Isometry3d::IDENTITY)
         .unwrap();
     cmds.entity(query.single().unwrap()).insert(space.0);
 }
