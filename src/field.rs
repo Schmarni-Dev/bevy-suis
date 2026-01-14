@@ -46,7 +46,7 @@ impl Field {
     /// point should be in world-space
     pub fn distance(&self, field_transform: &GlobalTransform, point: impl Into<Vec3A>) -> f32 {
         let point = point.into();
-        let world_to_local_matrix = field_transform.compute_matrix().inverse();
+        let world_to_local_matrix = field_transform.to_matrix().inverse();
         let p = world_to_local_matrix.transform_point3a(point);
         match self {
             Field::Sphere(radius) => p.length() - radius,

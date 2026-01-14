@@ -5,17 +5,23 @@ edition = "2024"
 license = "MIT"
 
 [features]
-default = ["xr"]
-xr = []
+default = []
+xr = ["schminput/xr"]
 
 [dependencies]
-bevy = { version = "0.16", features = ["track_location"] }
-bevy_mod_xr = "0.3"
-schminput = { version = "0.3", features = ["xr"] }
+bevy = { version = "0.17", features = [
+	"bevy_color",
+	"bevy_camera",
+	"bevy_gizmos",
+], default-features = false }
+bevy_mod_xr = "0.4"
+schminput = { version = "0.4" }
 
 [dev-dependencies]
-bevy_mod_openxr = "0.3"
+bevy_mod_openxr = "0.4"
 openxr = "0.19"
+bevy = { version = "0.17", default-features = true }
+
 
 [lints.clippy]
 too_many_arguments = "allow"

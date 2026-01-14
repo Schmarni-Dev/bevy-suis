@@ -1,7 +1,4 @@
-use bevy::{
-    platform::collections::HashSet, prelude::*,
-    render::pipelined_rendering::PipelinedRenderingPlugin,
-};
+use bevy::{platform::collections::HashSet, prelude::*};
 use bevy_mod_openxr::{
     add_xr_plugins, reference_space::OxrReferenceSpacePlugin, session::OxrSession,
 };
@@ -30,11 +27,9 @@ use openxr::ReferenceSpaceType;
 fn main() -> AppExit {
     App::new()
         .add_plugins(
-            add_xr_plugins(DefaultPlugins.build().disable::<PipelinedRenderingPlugin>()).set(
-                OxrReferenceSpacePlugin {
-                    default_primary_ref_space: ReferenceSpaceType::LOCAL,
-                },
-            ),
+            add_xr_plugins(DefaultPlugins.build()).set(OxrReferenceSpacePlugin {
+                default_primary_ref_space: ReferenceSpaceType::LOCAL,
+            }),
         )
         .add_plugins((
             SuisXrControllerDefaultBindingsPlugin {
@@ -130,7 +125,7 @@ fn make_spectator_cam_follow(
     session: Res<OxrSession>,
 ) {
     let space = session
-        .create_reference_space(ReferenceSpaceType::VIEW, Transform::IDENTITY)
+        .create_reference_space(ReferenceSpaceType::VIEW, Isometry3d::IDENTITY)
         .unwrap();
     cmds.entity(query.single().unwrap()).insert(space.0);
 }

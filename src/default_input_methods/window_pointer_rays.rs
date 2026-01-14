@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
 
 use bevy::{
-    ecs::{component::HookContext, world::DeferredWorld},
+    camera::RenderTarget,
+    ecs::{lifecycle::HookContext, world::DeferredWorld},
     input::mouse::MouseWheel,
     prelude::*,
-    render::camera::RenderTarget,
     window::{PrimaryWindow, WindowRef},
 };
 
@@ -97,7 +97,7 @@ fn update_mouse_data(
         ),
         With<MouseInputMethod>,
     >,
-    mut scroll: EventReader<MouseWheel>,
+    mut scroll: MessageReader<MouseWheel>,
     buttons: Res<ButtonInput<MouseButton>>,
     config: Res<SuisMouseConfig>,
     handler_query: InputHandlerQueryHelper,
